@@ -1,0 +1,52 @@
+# domate（ドメイト）
+
+やりたいことを、一緒にやる仲間と。
+Cherrish のサービス第1弾。体験のシェアと仲間募集ができるWebアプリです。
+
+## できること（v1）
+
+- **体験シェア**：最近やった面白いことを投稿（写真は任意）
+- **仲間募集**：日時・エリア・人数・参加条件をつけて募集 → 参加申請 → 募集者が承認
+- **参加者チャット**：募集した人と承認された人だけが使えるチャット
+- **いいね・コメント**
+- **公開範囲**：「みんなに公開」か「ルーム限定」を投稿ごとに選べる
+- **ルーム**：招待リンクを知っている人だけが入れる小さなコミュニティ
+- **安全機能**：18歳以上の確認、通報、ブロック
+
+## ファイル構成
+
+| ファイル | 役割 |
+|---|---|
+| `index.html` | 画面の土台とデザイン |
+| `app.js` | 画面の動き |
+| `store.js` | データの保存（デモモード／本番モード） |
+| `config.js` | Supabase のキーを入れる設定ファイル |
+| `supabase/schema.sql` | データベースの設定（Supabase に貼り付けて実行） |
+
+## 2つのモード
+
+- **デモモード**（`config.js` が空のとき）：ログインなし。データはそのブラウザの中だけに保存。
+  マイページで「別のユーザーになって試す」を使うと、申請→承認→チャットの流れを1人で確認できます。
+- **本番モード**（`config.js` に Supabase のキーを入れたとき）：ログインあり。投稿がみんなに共有されます。
+
+## 本番モードにする手順（友達に使ってもらうとき）
+
+1. [supabase.com](https://supabase.com) にGitHubアカウントでログインし、**New project** を作る
+   - Name：`domate`、Region：**Northeast Asia (Tokyo)**、プラン：Free
+   - Database Password は自分で保管しておく
+2. 左メニュー **SQL Editor** → 新しいクエリに `supabase/schema.sql` の中身を全部貼り付けて **Run**
+3. 左メニュー **Authentication** → **URL Configuration**
+   - Site URL と Redirect URLs に、公開したアプリのURL（例：`https://cherrish-jp.github.io/domate/`）を入れる
+4. **Project Settings** → **API**（または API Keys）で次の2つをコピーし、`config.js` に貼る
+   - Project URL → `SUPABASE_URL`
+   - Publishable key（anon key）→ `SUPABASE_ANON_KEY`
+   - ※ `service_role` / `secret` キーは絶対に貼らない
+5. 書き換えた `config.js` を GitHub にアップロードし直す
+
+### 知っておくこと
+
+- 無料プランの確認メールは、1時間に送れる数が少なめです。テスト中に困ったら、
+  Authentication の Email 設定で「Confirm email」をオフにするとメール確認なしで登録できます。
+- 無料プランのプロジェクトは、しばらく使われないと一時停止します。管理画面から再開できます。
+- 通報は管理画面の **Table Editor → reports** で確認できます。
+- 写真は推測されにくいURLで保存されますが、URLを知っていれば誰でも開けます。ルーム限定の投稿でも、見られて困る写真は載せないでください。
