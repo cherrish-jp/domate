@@ -84,6 +84,68 @@
       img.src = URL.createObjectURL(file);
     });
   }
+  const eventEnd = (p) => (p.end_at ? new Date(p.end_at).getTime() : p.activity_date ? new Date(p.activity_date).getTime() + 3 * 3600e3 : null);
+  const isEnded = (p) => p.kind === "recruit" && eventEnd(p) !== null && Date.now() > eventEnd(p);
+  let pendingCollage = null; // コラージュから体験シェアへ渡す画像
+
+  /* ---------------- コラージュ ---------------- */
+  async function loadBitmap(url) { return createImageBitmap(await (await fetch(url)).blob()); }
+  function rrect(g, x, y, w, h, r) {
+    g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+  function wrapLines(g, text, maxW, maxLines) {
+    const lines = []; let cur = "";
+    for (const ch of [...text]) {
+      if (g.measureText(cur + ch).width > maxW) { lines.push(cur); cur = ch; if (lines.length === maxLines) break; }
+      else cur += ch;
+    }
+    if (lines.length < maxLines && cur) lines.push(cur);
+    else if (lines.length === maxLines && cur) lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1) + "…";
+    return lines;
+  }
+  async function makeCollage(p, photos, memberCount) {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    const FONT = '"Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif';
+    g.fillStyle = "#fffaf7"; g.fillRect(0, 0, W, H);
+    g.fillStyle = "#fde8ee"; g.beginPath(); g.arc(W - 80, 70, 170, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#e8f5e8"; g.beginPath(); g.arc(40, H - 60, 140, 0, Math.PI * 2); g.fill();
+    // 見出し
+    g.fillStyle = "#3f3236"; g.font = `700 54px ${FONT}`; g.textBaseline = "alphabetic";
+    const lines = wrapLines(g, p.title, W - 140, 2);
+    lines.forEach((l, i) => g.fillText(l, 70, 120 + i * 68));
+    const metaY = 120 + lines.length * 68 + 4;
+    g.fillStyle = "#8b7c80"; g.font = `500 32px ${FONT}`;
+    g.fillText([p.activity_date ? fmtDate(p.activity_date) : "", p.area || ""].filter(Boolean).join("　・　"), 70, metaY);
+    // 写真
+    const top = metaY + 40, area = { x: 60, y: top, w: W - 120, h: H - top - 150 }, gap = 16;
+    const imgs = (await Promise.all(photos.slice(0, 6).map((ph) => loadBitmap(ph.url).catch(() => null)))).filter(Boolean);
+    const rows = { 1: [1], 2: [1, 1], 3: [1, 2], 4: [2, 2], 5: [2, 3], 6: [3, 3] }[imgs.length] || [];
+    const rh = (area.h - gap * (rows.length - 1)) / (rows.length || 1);
+    let k = 0;
+    rows.forEach((cols, ri) => {
+      const cw = (area.w - gap * (cols - 1)) / cols;
+      for (let ci = 0; ci < cols; ci++) {
+        const img = imgs[k++], x = area.x + ci * (cw + gap), y = area.y + ri * (rh + gap);
+        const s2 = Math.max(cw / img.width, rh / img.height), sw = cw / s2, sh = rh / s2;
+        g.save(); rrect(g, x, y, cw, rh, 28); g.clip();
+        g.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, x, y, cw, rh);
+        g.restore();
+      }
+    });
+    // フッター（トマトのロゴ）
+    const fy = H - 75;
+    g.fillStyle = "#e2574c"; g.beginPath(); g.arc(98, fy, 30, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#5bae5b"; g.beginPath(); g.moveTo(98, fy - 26); g.lineTo(84, fy - 44); g.lineTo(96, fy - 32); g.lineTo(98, fy - 48); g.lineTo(102, fy - 32); g.lineTo(114, fy - 44); g.closePath(); g.fill();
+    g.fillStyle = "#e2574c"; g.font = `700 50px "Quicksand", ${FONT}`; g.textBaseline = "middle";
+    g.fillText("domate", 142, fy + 2);
+    g.fillStyle = "#8b7c80"; g.font = `500 30px ${FONT}`; g.textAlign = "right";
+    g.fillText(`${memberCount}人でやってきた！`, W - 70, fy + 2);
+    return new Promise((res) => c.toBlob(res, "image/jpeg", 0.9));
+  }
+
   const inviteLink = (code) => location.origin + location.pathname + "#/join/" + code;
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); toast("コピーしました"); }
@@ -121,7 +183,7 @@
     const isRec = p.kind === "recruit";
     const closed = isRec && p.status === "closed";
     const badge = isRec
-      ? closed ? '<span class="badge closed">締め切り</span>' : '<span class="badge rec">仲間募集</span>'
+      ? isEnded(p) ? '<span class="badge closed">終了</span>' : closed ? '<span class="badge closed">締め切り</span>' : '<span class="badge rec">仲間募集</span>'
       : '<span class="badge exp">体験シェア</span>';
     const where = p.room ? ` · 🔒 ${esc(p.room.name)}` : " · 🌏 公開";
     const rec = isRec
@@ -226,6 +288,30 @@
     const mine = p.author_id === S.userId();
     const isRec = p.kind === "recruit";
     const [comments, requests] = await Promise.all([S.listComments(id), isRec && mine ? S.listRequests(id) : Promise.resolve([])]);
+    const member = isRec && (mine || p.my_request_status === "approved");
+    const ended = isEnded(p);
+    let members = [], photos = [], consents = [];
+    if (member && ended) [members, photos, consents] = await Promise.all([S.listChatMembers(id), S.listEventPhotos(id), S.listShareConsents(id)]);
+    const source = p.source_post_id ? await S.getPost(p.source_post_id).catch(() => null) : null;
+
+    let memoryPanel = "";
+    if (member && ended) {
+      const okNames = members.map((m) => `<span class="${consents.includes(m.id) ? "ok" : "ng"}">${consents.includes(m.id) ? "✓" : "・"} ${esc(m.display_name)}</span>`).join("");
+      memoryPanel = `<div class="sec-title">📸 おもいで</div>
+        <div class="card">
+          <p><b>おつかれさまでした！</b></p>
+          <p class="meta">当日の写真をみんなで集めて、コラージュにしよう。写真は参加メンバーだけが見られます。</p>
+          <div class="album">${photos.map((ph) => `<div class="ph"><img src="${esc(ph.url)}" alt="">${ph.uploader_id === S.userId() ? `<button data-act="delPhoto" data-id="${ph.id}" aria-label="削除">✕</button>` : ""}</div>`).join("")}
+            <label class="ph add">＋<span>写真を追加</span><input type="file" accept="image/*" multiple id="albumInput" hidden></label>
+          </div>
+          <button class="btn block" data-act="collage" style="margin-top:12px" ${photos.length ? "" : "disabled"}>🎨 コラージュをつくる</button>
+          <div class="consent"><span class="meta">外部へのシェアOK：</span>${okNames}</div>
+        </div>`;
+    } else if (member && p.activity_date) {
+      memoryPanel = `<div class="card" style="background:var(--pink-light)"><p class="meta">📸 ${fmtDate(new Date(eventEnd(p)).toISOString())} を過ぎると、みんなの写真を集めてコラージュが作れます</p></div>`;
+    }
+    const sourceHtml = source ? `<div class="card tap source" data-go="#/post/${source.id}"><span class="meta">↪ ${esc(source.author.display_name)}さんの投稿から生まれました</span><b>${esc(source.title)}</b></div>` : "";
+    const metoo = !isRec ? `<button class="btn sub block" data-act="metoo" style="margin-bottom:14px">🙋 私もやりたい！一緒にやる人を募集する</button>` : "";
 
     let recPanel = "";
     if (isRec && mine) {
@@ -260,7 +346,7 @@
         ${c.author_id === S.userId() ? `<button class="mini-link" data-act="delCmt" data-id="${c.id}">削除</button>` : `<button class="mini-link" data-act="repCmt" data-id="${c.id}">通報</button>`}
         <div class="body">${esc(c.body)}</div></div></div>`).join("");
 
-    const body = postCard(p, true) + recPanel +
+    const body = postCard(p, true) + sourceHtml + metoo + recPanel + memoryPanel +
       `<div class="sec-title">💬 コメント <span class="meta">${visible.length}</span></div>
        <div class="card">${cmtHtml || '<p class="meta">最初のコメントをしてみよう</p>'}
          <form data-form="comment" class="send-bar"><input class="input" name="body" maxlength="500" placeholder="コメントを書く" required><button class="btn" type="submit">送信</button></form>
@@ -291,9 +377,43 @@
       cancelJoin: async () => { await S.cancelJoin(p.id); toast("申請を取り消しました"); renderPost(id); },
       delCmt: async (el) => { await S.deleteComment(el.dataset.id); renderPost(id); },
       repCmt: (el) => openReport("comment", el.dataset.id),
+      metoo: () => { location.hash = `#/new?kind=recruit&from=${p.id}`; },
+      delPhoto: async (el) => { await S.deleteEventPhoto(photos.find((x) => x.id === el.dataset.id)); renderPost(id); },
+      collage: async () => {
+        const blob = await makeCollage(p, photos, members.length);
+        const url = URL.createObjectURL(blob);
+        const allOk = members.every((m) => consents.includes(m.id));
+        const iOk = consents.includes(S.userId());
+        const file = new File([blob], "domate-collage.jpg", { type: "image/jpeg" });
+        sheet(`<h2>コラージュができました</h2>
+          <img src="${url}" alt="コラージュ" style="border-radius:14px;margin:10px 0;box-shadow:var(--shadow)">
+          <div class="consent" style="margin-bottom:10px"><span class="meta">外部へのシェアOK：</span>${members.map((m) => `<span class="${consents.includes(m.id) ? "ok" : "ng"}">${consents.includes(m.id) ? "✓" : "・"} ${esc(m.display_name)}</span>`).join("")}</div>
+          <button class="btn ${iOk ? "ghost" : "green"} block" data-act="consent">${iOk ? "シェアOKを取り消す" : "私はシェアOK！"}</button>
+          ${allOk ? `<div class="row" style="margin-top:10px">
+              <button class="btn" style="flex:1" data-act="share">📤 シェア</button>
+              <button class="btn sub" style="flex:1" data-act="save">💾 保存</button></div>
+              <button class="btn sub block" style="margin-top:10px" data-act="post">🌸 domateに体験シェアとして投稿</button>`
+            : `<p class="hint" style="text-align:center;margin-top:10px">写っている全員がOKすると、保存・シェア・投稿ができます。<br>チャットで声をかけてみよう</p>`}`, {
+          consent: async (_a, close) => { await S.setShareConsent(p.id, !iOk); close(); toast(iOk ? "取り消しました" : "シェアOKにしました"); await renderPost(id); },
+          save: () => { const a = document.createElement("a"); a.href = url; a.download = "domate-collage.jpg"; document.body.appendChild(a); a.click(); a.remove(); },
+          share: async () => {
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              try { await navigator.share({ files: [file], title: p.title, text: `${p.title} #domate` }); } catch (e) {}
+            } else { toast("この端末ではシェアできないので、保存してから投稿してください"); }
+          },
+          post: (_a, close) => { pendingCollage = { blob, from: p }; close(); location.hash = `#/new?kind=experience&from=${p.id}&collage=1`; },
+        });
+      },
       join: async (f) => { await S.requestJoin(p.id, f.message.value.trim()); toast("参加を申請しました"); renderPost(id); },
       comment: async (f) => { const v = f.body.value.trim(); if (!v) return; await S.addComment(p.id, v); renderPost(id); },
     });
+    const albumInput = document.getElementById("albumInput");
+    if (albumInput) albumInput.addEventListener("change", (e) => guard(async () => {
+      const files = [...e.target.files].slice(0, 10); if (!files.length) return;
+      toast(`${files.length}枚アップロード中…`);
+      for (const f of files) await S.uploadEventPhoto(p.id, await resizeImage(f, S.mode === "demo" ? 640 : 1600));
+      toast("写真を追加しました"); renderPost(id);
+    }));
   }
 
   /* ---------------- チャット ---------------- */
@@ -341,6 +461,15 @@
     const preRoom = q.get("room");
     let kind = q.get("kind") === "recruit" ? "recruit" : "experience";
     let imageBlob = null;
+    const fromId = q.get("from");
+    const from = fromId ? await S.getPost(fromId) : null;
+    let pre = { title: "", body: "", room: preRoom };
+    if (from) {
+      pre.room = from.room_id || preRoom;
+      if (kind === "recruit") pre = { ...pre, title: `私も「${from.title.replace(/[「」]/g, "").replace(/のおもいで$/, "")}」やりたい！`.slice(0, 60), body: `${from.author.display_name}さんの投稿を見て、やってみたくなりました！` };
+      else pre = { ...pre, title: `「${from.title}」のおもいで`.slice(0, 60) };
+      if (q.get("collage") && pendingCollage && pendingCollage.from.id === from.id) imageBlob = pendingCollage.blob;
+    }
     const minDate = new Date(Date.now() + 3600e3 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     const body = `<form data-form="post" id="postForm">
       <div class="kind-pick">
@@ -349,18 +478,20 @@
       </div>
 
       <label class="f">タイトル</label>
-      <input class="input" name="title" maxlength="60" required placeholder="${kind === "recruit" ? "例：週末にボルダリング行く人！" : "例：初めて陶芸体験してきた"}">
+      <input class="input" name="title" maxlength="60" required value="${esc(pre.title)}" placeholder="${kind === "recruit" ? "例：週末にボルダリング行く人！" : "例：初めて陶芸体験してきた"}">
 
       <label class="f">内容 <small>（任意）</small></label>
-      <textarea class="input" name="body" maxlength="2000" placeholder="どんなことをした？どうだった？"></textarea>
+      <textarea class="input" name="body" maxlength="2000" placeholder="どんなことをした？どうだった？">${esc(pre.body)}</textarea>
 
       <label class="f">写真 <small>（任意）</small></label>
       <input type="file" accept="image/*" name="photo" id="photo" class="input">
-      <div id="preview"></div>
+      <div id="preview">${imageBlob ? `<div class="preview"><img class="photo" src="${URL.createObjectURL(imageBlob)}" alt=""><button type="button" data-act="rmPhoto">✕</button></div>` : ""}</div>
 
       <div id="recFields" style="display:${kind === "recruit" ? "block" : "none"}">
         <label class="f">日時</label>
         <input class="input" type="datetime-local" name="date" min="${minDate}">
+        <label class="f">終了予定 <small>（任意。過ぎるとみんなでコラージュが作れます）</small></label>
+        <input class="input" type="datetime-local" name="end" min="${minDate}">
         <label class="f">エリア <small>（駅名や地域くらいの大まかさで）</small></label>
         <input class="input" name="area" maxlength="40" placeholder="例：渋谷、横浜駅周辺、オンライン">
         <label class="f">募集人数 <small>（あなた以外に何人？）</small></label>
@@ -372,8 +503,8 @@
 
       <label class="f">公開範囲</label>
       <div class="vis">
-        <label><input type="radio" name="vis" value="public" ${preRoom ? "" : "checked"}>🌏 みんなに公開</label>
-        ${rooms.map((r) => `<label><input type="radio" name="vis" value="${r.id}" ${preRoom === r.id ? "checked" : ""}>🔒 ${esc(r.name)} のメンバーだけ</label>`).join("")}
+        <label><input type="radio" name="vis" value="public" ${pre.room ? "" : "checked"}>🌏 みんなに公開</label>
+        ${rooms.map((r) => `<label><input type="radio" name="vis" value="${r.id}" ${pre.room === r.id ? "checked" : ""}>🔒 ${esc(r.name)} のメンバーだけ</label>`).join("")}
       </div>
       ${rooms.length ? "" : '<p class="hint">ルームを作ると、仲のいい人だけに見える投稿もできます</p>'}
 
@@ -394,17 +525,21 @@
           kind, title: f.title.value.trim(), body: f.body.value.trim(),
           visibility: vis === "public" ? "public" : "room", room_id: vis === "public" ? null : vis,
         };
+        if (from) data.source_post_id = from.id;
         if (!data.title) throw new Error("タイトルを入れてください");
         if (kind === "recruit") {
           if (!f.date.value) throw new Error("日時を入れてください");
+          if (f.end.value && new Date(f.end.value) <= new Date(f.date.value)) throw new Error("終了予定は開始より後にしてください");
           const cap = parseInt(f.capacity.value, 10);
           if (!(cap >= 1 && cap <= 100)) throw new Error("募集人数は1〜100人で入れてください");
           Object.assign(data, {
             activity_date: new Date(f.date.value).toISOString(), area: f.area.value.trim() || null,
+            end_at: f.end.value ? new Date(f.end.value).toISOString() : null,
             capacity: cap, conditions: f.conditions.value.trim() || null, status: "open",
           });
         }
         const r = await S.createPost(data, imageBlob);
+        pendingCollage = null;
         toast("投稿しました🍅"); location.hash = "#/post/" + r.id;
       },
     });
@@ -488,13 +623,14 @@
         <div class="meta">${p.activity_date ? "📅 " + fmtDate(p.activity_date) : ""}　👥 ${p.approved_count}/${p.capacity}人</div>
         <div class="row" style="margin-top:8px">
           ${waiting ? `<span class="status-pill st-pending">🔔 申請 ${waiting}件</span>` : ""}
+          ${isEnded(p) ? `<span class="status-pill st-approved">📸 おもいでを残そう</span>` : ""}
           <a class="btn sm sub" href="#/chat/${p.id}" data-go="#/chat/${p.id}">💬 チャット</a>
         </div></div>`;
     }).join("");
     const reqHtml = myReqs.filter((r) => r.post).map((r) => `<div class="card tap" data-go="#/post/${r.post.id}">
         <div style="display:flex;gap:8px;align-items:center"><b style="flex:1">${esc(r.post.title)}</b>${statusPill(r.status)}</div>
         <div class="meta">${r.post.activity_date ? "📅 " + fmtDate(r.post.activity_date) : ""} ${r.post.area ? "📍 " + esc(r.post.area) : ""}</div>
-        ${r.status === "approved" ? `<a class="btn sm" style="margin-top:8px" href="#/chat/${r.post.id}" data-go="#/chat/${r.post.id}">💬 チャットを開く</a>` : ""}
+        ${r.status === "approved" ? `<div class="row" style="margin-top:8px"><a class="btn sm" href="#/chat/${r.post.id}" data-go="#/chat/${r.post.id}">💬 チャットを開く</a>${r.post.activity_date && Date.now() > new Date(r.post.end_at || new Date(r.post.activity_date).getTime() + 3 * 3600e3).getTime() ? `<a class="btn sm green" href="#/post/${r.post.id}" data-go="#/post/${r.post.id}">📸 おもいで</a>` : ""}</div>` : ""}
       </div>`).join("");
     const body = `<div class="sec-title">📣 あなたの募集</div>
       ${recHtml || `<div class="card"><p class="meta">まだ募集していません</p><a class="btn sm" style="margin-top:10px" href="#/new?kind=recruit">仲間を募集する</a></div>`}

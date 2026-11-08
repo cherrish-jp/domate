@@ -8,11 +8,27 @@
      デモモード
      ========================================================= */
   function LocalStore() {
-    const KEY = "domate-demo-v1";
+    const KEY = "domate-demo-v2";
     const iso = (t) => new Date(t).toISOString();
     const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     const H = 3600e3, D = 24 * H;
     const at = (days, hour) => { const d = new Date(Date.now() + days * D); d.setHours(hour, 0, 0, 0); return iso(d.getTime()); };
+
+    // デモ用の写真（その場で絵を描いて作る）
+    function makePhoto(c1, c2, emoji, label) {
+      try {
+        const c = document.createElement("canvas"); c.width = 640; c.height = 480;
+        const g = c.getContext("2d");
+        const gr = g.createLinearGradient(0, 0, 640, 480); gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+        g.fillStyle = gr; g.fillRect(0, 0, 640, 480);
+        g.fillStyle = "rgba(255,255,255,.18)";
+        for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(80 + i * 110, 90 + (i % 2) * 300, 50 + (i % 3) * 20, 0, Math.PI * 2); g.fill(); }
+        g.textAlign = "center"; g.textBaseline = "middle";
+        g.font = "150px sans-serif"; g.fillText(emoji, 320, 210);
+        g.fillStyle = "#fff"; g.font = "bold 40px sans-serif"; g.fillText(label, 320, 380);
+        return c.toDataURL("image/jpeg", 0.75);
+      } catch (e) { return null; }
+    }
 
     function seed() {
       const now = Date.now();
@@ -37,6 +53,7 @@
           { id: "p3", author_id: "u_c", kind: "experience", title: "商店街の食べ歩きスタンプラリー", body: "地元の商店街でやってたスタンプラリーに参加。コロッケ、たい焼き、みたらし団子…全部制覇しました。お店の人と話せるのも楽しかった！", visibility: "public", room_id: null, created_at: iso(now - 1 * D) },
           { id: "p4", author_id: "u_me", kind: "recruit", title: "朝ヨガ一緒にやりませんか", body: "公園で朝ヨガを始めたいです。一緒にやってくれる人がいたら続けられそう！", visibility: "public", room_id: null, activity_date: at(5, 7), area: "代々木公園", capacity: 4, conditions: "手ぶらOK・朝7時集合", status: "open", created_at: iso(now - 2 * D) },
           { id: "p5", author_id: "u_a", kind: "experience", title: "ゼミ後に行ったカレー屋が最高だった", body: "駅の裏のスパイスカレー屋さん、みんなで行ったら大当たりでした。次は辛さ5に挑戦したい。", visibility: "room", room_id: "r1", created_at: iso(now - 2 * H) },
+          { id: "p8", author_id: "u_b", kind: "recruit", title: "ボウリングで本気の3ゲーム勝負", body: "負けた人がジュースおごりで！ゆるく本気でやりましょう。", visibility: "public", room_id: null, activity_date: at(-2, 18), end_at: at(-2, 21), area: "池袋", capacity: 3, conditions: "スコア100以下でも大歓迎", status: "closed", created_at: iso(now - 6 * D) },
           { id: "p6", author_id: "u_c", kind: "recruit", title: "フィルムカメラでおさんぽしませんか", body: "古い街並みをのんびり歩きながら写真を撮りたいです。", visibility: "public", room_id: null, activity_date: at(9, 10), area: "谷中", capacity: 2, conditions: "カメラがなくてもOK", status: "open", created_at: iso(now - 3 * D) },
         ],
         likes: [
@@ -49,11 +66,22 @@
         ],
         join_requests: [
           { id: "j1", post_id: "p4", user_id: "u_a", message: "ヨガ初心者ですが参加したいです！", status: "approved", created_at: iso(now - 30 * H) },
+          { id: "j3", post_id: "p8", user_id: "u_me", message: "ボウリング久しぶりです！", status: "approved", created_at: iso(now - 5 * D) },
+          { id: "j4", post_id: "p8", user_id: "u_c", message: "行きたい！", status: "approved", created_at: iso(now - 5 * D) },
           { id: "j2", post_id: "p4", user_id: "u_b", message: "体かたいけど大丈夫ですか？笑", status: "pending", created_at: iso(now - 5 * H) },
         ],
         messages: [
           { id: "m1", post_id: "p4", author_id: "u_me", body: "参加ありがとうございます！当日は正面入口に集合でお願いします🧘", created_at: iso(now - 28 * H) },
           { id: "m2", post_id: "p4", author_id: "u_a", body: "了解です！楽しみにしてます〜", created_at: iso(now - 27 * H) },
+        ],
+        event_photos: [
+          { id: "ph1", post_id: "p8", uploader_id: "u_b", data: makePhoto("#f08a5d", "#e2574c", "🎳", "STRIKE!"), created_at: iso(now - 2 * D + 2 * H) },
+          { id: "ph2", post_id: "p8", uploader_id: "u_c", data: makePhoto("#6c9bd2", "#b58ad9", "🥤", "おごりジュース"), created_at: iso(now - 2 * D + 2 * H) },
+          { id: "ph3", post_id: "p8", uploader_id: "u_b", data: makePhoto("#5bae5b", "#d9a441", "🏆", "優勝 そうた"), created_at: iso(now - 2 * D + 3 * H) },
+          { id: "ph4", post_id: "p8", uploader_id: "u_c", data: makePhoto("#e58fb0", "#f4a7b9", "📸", "3人で記念撮影"), created_at: iso(now - 2 * D + 3 * H) },
+        ],
+        share_consents: [
+          { post_id: "p8", user_id: "u_b" }, { post_id: "p8", user_id: "u_c" },
         ],
         reports: [],
         blocks: [],
@@ -73,6 +101,7 @@
     const prof = (id) => { const p = db.profiles.find((x) => x.id === id); return p ? { id: p.id, display_name: p.display_name } : { id, display_name: "退会したユーザー" }; };
     const isMember = (roomId) => db.room_members.some((m) => m.room_id === roomId && m.user_id === me());
     const canSee = (p) => p && (p.visibility === "public" || p.author_id === me() || (p.room_id && isMember(p.room_id)));
+    const memberIds = (p) => [p.author_id, ...db.join_requests.filter((j) => j.post_id === p.id && j.status === "approved").map((j) => j.user_id)];
     const isChatMember = (p) => p.author_id === me() || db.join_requests.some((j) => j.post_id === p.id && j.user_id === me() && j.status === "approved");
     const decorate = (p) => {
       const room = p.room_id ? db.rooms.find((r) => r.id === p.room_id) : null;
@@ -121,7 +150,7 @@
       async deletePost(id) {
         const p = db.posts.find((x) => x.id === id); need(p && p.author_id === me(), "権限がありません");
         db.posts = db.posts.filter((x) => x.id !== id);
-        ["likes", "comments", "join_requests", "messages"].forEach((t) => (db[t] = db[t].filter((x) => x.post_id !== id)));
+        ["likes", "comments", "join_requests", "messages", "event_photos", "share_consents"].forEach((t) => (db[t] = db[t].filter((x) => x.post_id !== id)));
         save();
       },
 
@@ -150,7 +179,7 @@
       async listMyRequests() {
         return db.join_requests.filter((j) => j.user_id === me()).map((j) => {
           const p = db.posts.find((x) => x.id === j.post_id);
-          return { ...j, post: p ? { id: p.id, title: p.title, activity_date: p.activity_date, area: p.area } : null };
+          return { ...j, post: p ? { id: p.id, title: p.title, activity_date: p.activity_date, end_at: p.end_at, area: p.area } : null };
         });
       },
 
@@ -161,6 +190,26 @@
       async sendMessage(postId, body) {
         const p = db.posts.find((x) => x.id === postId); need(p && isChatMember(p), "チャットに参加していません");
         db.messages.push({ id: newId(), post_id: postId, author_id: me(), body, created_at: iso(Date.now()) }); save();
+      },
+
+      async listChatMembers(postId) {
+        const p = db.posts.find((x) => x.id === postId); need(p && isChatMember(p), "参加者ではありません");
+        return memberIds(p).map(prof);
+      },
+      async listEventPhotos(postId) {
+        const p = db.posts.find((x) => x.id === postId); need(p && isChatMember(p), "参加者ではありません");
+        return db.event_photos.filter((x) => x.post_id === postId && x.data).map((x) => ({ ...x, url: x.data, uploader: prof(x.uploader_id) }));
+      },
+      async uploadEventPhoto(postId, blob) {
+        const p = db.posts.find((x) => x.id === postId); need(p && isChatMember(p), "参加者ではありません");
+        db.event_photos.push({ id: newId(), post_id: postId, uploader_id: me(), data: await blobToDataUrl(blob), created_at: iso(Date.now()) }); save();
+      },
+      async deleteEventPhoto(photo) { db.event_photos = db.event_photos.filter((x) => !(x.id === photo.id && x.uploader_id === me())); save(); },
+      async listShareConsents(postId) { return db.share_consents.filter((c) => c.post_id === postId).map((c) => c.user_id); },
+      async setShareConsent(postId, okay) {
+        db.share_consents = db.share_consents.filter((c) => !(c.post_id === postId && c.user_id === me()));
+        if (okay) db.share_consents.push({ post_id: postId, user_id: me() });
+        save();
       },
 
       async listMyRooms() {
@@ -274,10 +323,34 @@
       async cancelJoin(postId) { ok(await sb.from("join_requests").delete().eq("post_id", postId).eq("user_id", me())); },
       async listRequests(postId) { return ok(await sb.from("join_requests").select("*, user:profiles(id,display_name)").eq("post_id", postId).order("created_at")); },
       async setRequestStatus(id, status) { ok(await sb.from("join_requests").update({ status }).eq("id", id)); },
-      async listMyRequests() { return ok(await sb.from("join_requests").select("*, post:posts(id,title,activity_date,area)").eq("user_id", me()).order("created_at", { ascending: false })); },
+      async listMyRequests() { return ok(await sb.from("join_requests").select("*, post:posts!join_requests_post_id_fkey(id,title,activity_date,end_at,area)").eq("user_id", me()).order("created_at", { ascending: false })); },
 
       async listMessages(postId) { return ok(await sb.from("messages").select("*, author:profiles(id,display_name)").eq("post_id", postId).order("created_at").limit(300)); },
       async sendMessage(postId, body) { ok(await sb.from("messages").insert({ post_id: postId, author_id: me(), body })); },
+
+      async listChatMembers(postId) { return ok(await sb.rpc("chat_members", { p: postId })); },
+      async listEventPhotos(postId) {
+        const rows = ok(await sb.from("event_photos").select("*, uploader:profiles(id,display_name)").eq("post_id", postId).order("created_at"));
+        const withUrls = await Promise.all(rows.map(async (r) => {
+          const { data, error } = await sb.storage.from("event-photos").download(r.path);
+          return error ? null : { ...r, url: URL.createObjectURL(data) };
+        }));
+        return withUrls.filter(Boolean);
+      },
+      async uploadEventPhoto(postId, blob) {
+        const path = `${postId}/${me()}-${Date.now()}.jpg`;
+        ok(await sb.storage.from("event-photos").upload(path, blob, { contentType: "image/jpeg" }));
+        ok(await sb.from("event_photos").insert({ post_id: postId, uploader_id: me(), path }));
+      },
+      async deleteEventPhoto(photo) {
+        await sb.storage.from("event-photos").remove([photo.path]);
+        ok(await sb.from("event_photos").delete().eq("id", photo.id));
+      },
+      async listShareConsents(postId) { return ok(await sb.from("share_consents").select("user_id").eq("post_id", postId)).map((r) => r.user_id); },
+      async setShareConsent(postId, okay) {
+        if (okay) ok(await sb.from("share_consents").upsert({ post_id: postId, user_id: me() }));
+        else ok(await sb.from("share_consents").delete().eq("post_id", postId).eq("user_id", me()));
+      },
 
       async listMyRooms() {
         const rows = ok(await sb.from("room_members").select("role, room:rooms(*)").eq("user_id", me()));
