@@ -8,6 +8,6 @@
 // ※「service_role」や「secret」と書かれたキーは絶対に入れないでください。
 // ------------------------------------------------------------
 window.DOMATE_CONFIG = {
-  SUPABASE_URL: "https://uobghemlvkliapdspghs.supabase.co/rest/v1/",
-  SUPABASE_ANON_KEY: "ここにコピーしたキーを貼る"
+  SUPABASE_URL: "https://uobghemlvkliapdspghs.supabase.co",
+  SUPABASE_ANON_KEY: "https://uobghemlvkliapdspghs.supabase.co/rest/v1/"
 };
