@@ -9,5 +9,5 @@
 // ------------------------------------------------------------
 window.DOMATE_CONFIG = {
   SUPABASE_URL: "https://uobghemlvkliapdspghs.supabase.co",
-  SUPABASE_ANON_KEY: "https://uobghemlvkliapdspghs.supabase.co/rest/v1/"
+  SUPABASE_ANON_KEY: "sb_publishable_qrLHW9_9hkY7bU3p8XlUSg_8EWjr30r"
 };
