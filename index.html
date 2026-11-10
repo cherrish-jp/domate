@@ -200,6 +200,49 @@
 
   .empty { text-align: center; color: var(--soft); padding: 48px 20px; }
   .empty .big { width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 50%; background: var(--tomato); opacity: .9; }
+
+  /* プロフィール・絞り込み */
+  .who-btn { flex: 0 0 auto; border-radius: 50%; }
+  .name-btn { font-weight: 800; font-size: .88rem; padding: 0; }
+  .name-btn:hover { text-decoration: underline; }
+  .cat { display: inline-block; font-size: .72rem; font-weight: 800; color: var(--tomato); margin-bottom: 2px; letter-spacing: .02em; }
+  .filters { display: flex; gap: 6px; margin: -4px 0 16px; overflow-x: auto; scrollbar-width: none; }
+  .filters::-webkit-scrollbar { display: none; }
+  .fbtn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 7px 13px; border-radius: 10px; background: var(--wash); font-size: .83rem; font-weight: 700; color: var(--ink); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fbtn.on { background: var(--blue); color: #fff; }
+  .fclear { flex: 0 0 auto; font-size: .8rem; color: var(--soft); text-decoration: underline; padding: 0 6px; }
+  .picks { display: flex; flex-wrap: wrap; gap: 7px; }
+  .pick { padding: 8px 14px; border-radius: 10px; border: 1.5px solid var(--line); font-size: .86rem; font-weight: 700; background: #fff; }
+  .pick.sm { padding: 5px 10px; font-size: .78rem; }
+  .pick.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .pick-group { font-size: .8rem; font-weight: 800; color: var(--soft); margin: 16px 0 8px; }
+  .sheet-foot { position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom)); background: #fff; padding: 14px 0 6px; margin-top: 10px; }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .cal-head .icon-btn:disabled { opacity: .25; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+  .cal .wk { font-size: .72rem; color: var(--soft); padding: 4px 0; }
+  .day { aspect-ratio: 1; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--wide); font-stretch: 125%; font-weight: 700; font-size: .9rem; position: relative; }
+  .day:disabled { color: #c8c8c8; cursor: default; }
+  .day.today { box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .day.has { background: var(--blue); color: #fff; }
+  .day i { font-style: normal; font-size: .62rem; font-weight: 800; line-height: 1; opacity: .9; }
+  .day:not(:disabled):hover { background: var(--wash); }
+  .day.has:hover { background: #1630d6; }
+  .prof { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .prof h2 { font-size: 1.25rem; font-weight: 800; }
+  .tags, .trust { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+  .tags span, .trust span { font-size: .74rem; font-weight: 700; background: var(--wash); border-radius: 8px; padding: 2px 9px; }
+  .trust { justify-content: flex-start; margin: 4px 0; }
+  .cmt .status-pill { margin-left: 8px; }
+  .cmt > .who-btn { align-self: flex-start; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+  .stats div { border: 1.5px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; display: flex; flex-direction: column; }
+  .stats b { font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: 1.8rem; line-height: 1.1; }
+  .stats span { font-size: .74rem; color: var(--soft); font-weight: 700; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .area-sel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .area-sel select:disabled { opacity: .5; }
+  .warn { background: #fff4cc; border-color: #ffe08a; font-size: .86rem; font-weight: 700; }
   .loading { text-align: center; padding: 48px; color: var(--soft); }
 
   /* ログイン */
@@ -218,6 +261,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
+  <script src="areas.js"></script>
   <script src="store.js"></script>
   <script src="app.js"></script>
 </body>

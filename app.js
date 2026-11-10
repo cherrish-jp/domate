@@ -6,7 +6,24 @@
   let blocked = new Set();     // ブロック中のユーザーID
   let pollTimer = null;        // チャットの自動更新
   const cache = new Map();     // 表示中の投稿
-  const state = { feedKind: "" };
+  const state = { feedKind: "", filters: { cats: [], lines: [], extra: [], date: null } };
+  const AREAS = window.DOMATE_AREAS || [], CATS = window.DOMATE_CATEGORIES || [];
+  const GENDERS = window.DOMATE_GENDERS || [], AGES = window.DOMATE_AGES || [];
+  const ALL_LINES = AREAS.flatMap((g) => g.lines);
+  const lineById = (id) => ALL_LINES.find((l) => l.id === id);
+  const catName = (id) => (CATS.find((c) => c.id === id) || {}).name || "";
+  const genderName = (id) => (GENDERS.find((g) => g.id === id) || {}).name || "";
+  const ageName = (id) => (AGES.find((a) => a.id === id) || {}).name || "";
+  const trustText = (u) => [ageName(u.age_range), u.gender && u.gender !== "none" ? genderName(u.gender) : ""].filter(Boolean).join("・");
+  const areaText = (p) => (p.station ? (p.line && !["online", "pref"].includes(p.line) && lineById(p.line) ? `${p.station}（${lineById(p.line).name}）` : p.station) : p.area || "");
+  function filterStations() {
+    const f = state.filters;
+    const set = new Set(f.extra);
+    f.lines.forEach((id) => (lineById(id) || { stations: [] }).stations.forEach((st) => set.add(st)));
+    return [...set];
+  }
+  const dayStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
   /* ---------------- 小さな道具 ---------------- */
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -55,7 +72,8 @@
     app.innerHTML = html;
     app.onclick = async (e) => {
       const a = e.target.closest("[data-act]");
-      if (a && handlers[a.dataset.act]) { e.preventDefault(); e.stopPropagation(); await guard(() => handlers[a.dataset.act](a, e)); return; }
+      const h = a && (handlers[a.dataset.act] || (a.dataset.act === "profile" ? (el) => openProfile(el.dataset.uid, el.dataset.room) : null));
+      if (h) { e.preventDefault(); e.stopPropagation(); await guard(() => h(a, e)); return; }
       const g = e.target.closest("[data-go]");
       if (g) location.hash = g.dataset.go;
     };
@@ -212,15 +230,17 @@
     const where = p.room ? `${icon("lock")}${esc(p.room.name)}` : `${icon("globe")}公開`;
     const mine = p.author_id === S.userId();
     const my = p.my_request_status ? statusPill(p.my_request_status) : mine && isRec ? '<span class="status-pill">あなたの募集</span>' : "";
-    const head = `<div class="card-head">${avatar(p.author)}
-        <div class="who"><b>${esc(p.author.display_name)}</b><span class="meta">${ago(p.created_at)}</span><span class="meta">${where}</span></div>
+    const name = p.nick || p.author.display_name;
+    const trust = isRec ? trustText(p.author) : "";
+    const head = `<div class="card-head"><button class="who-btn" data-act="profile" data-uid="${p.author.id}" data-room="${p.room_id || ""}">${avatar(p.author)}</button>
+        <div class="who"><button class="name-btn" data-act="profile" data-uid="${p.author.id}" data-room="${p.room_id || ""}">${esc(name)}</button>${trust ? `<span class="meta">${esc(trust)}</span>` : ""}<span class="meta">${ago(p.created_at)}</span><span class="meta">${where}</span></div>
         ${full ? `<button class="icon-btn" data-act="menu" aria-label="メニュー">${icon("more")}</button>` : ""}
       </div>`;
     const actions = `<div class="actions">
         <button class="act${p.liked_by_me ? " liked" : ""}" data-act="like" data-id="${p.id}" aria-label="いいね">${icon("heart")}<span>${p.like_count}</span></button>
         <span class="act">${icon("chat")}${p.comment_count}</span><span class="spacer"></span>${my}
       </div>`;
-    const text = `<h3>${esc(p.title)}</h3>${p.body ? `<p class="body${full ? "" : " clamp"}">${esc(p.body)}</p>` : ""}`;
+    const text = `${p.category ? `<span class="cat">${esc(catName(p.category))}</span>` : ""}<h3>${esc(p.title)}</h3>${p.body ? `<p class="body${full ? "" : " clamp"}">${esc(p.body)}</p>` : ""}`;
     const go = full ? "" : ` tap" data-go="#/post/${p.id}`;
     if (!isRec) {
       return `<article class="post exp${full ? " full" : ""}${go}">
@@ -237,7 +257,7 @@
       <div class="stub">${stub}${state ? `<span class="st">${state}</span>` : ""}</div>
       <div class="ticket">${head}${text}
         <div class="facts">
-          ${p.area ? `<div>${icon("pin")}<span>${esc(p.area)}</span></div>` : ""}
+          ${areaText(p) ? `<div>${icon("pin")}<span>${esc(areaText(p))}</span></div>` : ""}
           <div>${icon("users")}<span>${p.approved_count} / ${p.capacity || "-"}人 参加</span></div>
           ${p.conditions ? `<div>${icon("check")}<span>${esc(p.conditions)}</span></div>` : ""}
         </div>
@@ -286,8 +306,15 @@
       room = await S.getRoom(roomId);
       if (!room) { toast("このルームは見られません"); location.hash = "#/rooms"; return; }
     }
-    const [rooms, posts] = await Promise.all([S.listMyRooms(), S.listPosts({ roomId, kind: state.feedKind || undefined })]);
-    const list = posts.filter((p) => !blocked.has(p.author_id));
+    const f = state.filters;
+    const dateKind = f.date ? "recruit" : state.feedKind || undefined;
+    const [rooms, posts, members] = await Promise.all([
+      S.listMyRooms(),
+      S.listPosts({ roomId, kind: dateKind, categories: f.cats, stations: filterStations(), from: f.date && f.date.from, to: f.date && f.date.to }),
+      roomId ? S.getRoomMembers(roomId) : Promise.resolve([]),
+    ]);
+    const nick = Object.fromEntries(members.filter((m) => m.nickname).map((m) => [m.user_id, m.nickname]));
+    const list = posts.filter((p) => !blocked.has(p.author_id)).map((p) => ({ ...p, nick: nick[p.author_id] }));
     const chips = `<div class="chips">
         <a class="chip${roomId ? "" : " on"}" href="#/">みんな</a>
         ${rooms.map((r) => `<a class="chip${r.id === roomId ? " on" : ""}" href="#/room/${r.id}">${esc(r.name)}</a>`).join("")}
@@ -305,15 +332,127 @@
         <button class="${state.feedKind === "experience" ? "on" : ""}" data-act="kind" data-k="experience">体験シェア</button>
         <button class="${state.feedKind === "recruit" ? "on" : ""}" data-act="kind" data-k="recruit">仲間募集</button>
       </div>`;
-    const empty = `<div class="empty"><div class="big"></div><p>まだ投稿がありません。<br>最近やったことや、やりたいことを投稿してみよう</p>
+    const areaLabel = f.lines.length + f.extra.length ? [...f.lines.map((id) => lineById(id).name), ...f.extra][0] + (f.lines.length + f.extra.length > 1 ? ` ほか${f.lines.length + f.extra.length - 1}` : "") : "エリア";
+    const filters = `<div class="filters">
+        <button class="fbtn${f.cats.length ? " on" : ""}" data-act="fCat">${f.cats.length ? `${esc(catName(f.cats[0]))}${f.cats.length > 1 ? ` ほか${f.cats.length - 1}` : ""}` : "カテゴリ"}</button>
+        <button class="fbtn${f.lines.length + f.extra.length ? " on" : ""}" data-act="fArea">${icon("pin")}${esc(areaLabel)}</button>
+        <button class="fbtn${f.date ? " on" : ""}" data-act="fDate">${icon("clock")}${f.date ? esc(f.date.label) : "日付"}</button>
+        ${f.cats.length || f.lines.length || f.extra.length || f.date ? '<button class="fclear" data-act="fClear">クリア</button>' : ""}
+      </div>`;
+    const filtered = f.cats.length || f.lines.length || f.extra.length || f.date;
+    const empty = filtered ? `<div class="empty"><div class="big"></div><p>条件に合う投稿はまだありません。<br>条件を変えるか、自分で募集してみよう</p>
+      <a class="btn" style="margin-top:14px" href="#/new?kind=recruit">募集する</a></div>` : `<div class="empty"><div class="big"></div><p>まだ投稿がありません。<br>最近やったことや、やりたいことを投稿してみよう</p>
       <a class="btn" style="margin-top:14px" href="#/new${roomId ? "?room=" + roomId : ""}">投稿する</a></div>`;
-    setView(layout({ body: chips + roomHead + seg + (list.length ? list.map((p) => postCard(p)).join("") : empty), active: roomId ? "rooms" : "home" }), {
+    setView(layout({ body: chips + roomHead + (f.date ? "" : seg) + filters + (list.length ? list.map((p) => postCard(p)).join("") : empty), active: roomId ? "rooms" : "home" }), {
       like: likeHandler,
       kind: (el) => { state.feedKind = el.dataset.k; renderFeed(roomId); },
+      fClear: () => { state.filters = { cats: [], lines: [], extra: [], date: null }; renderFeed(roomId); },
+      fCat: () => openCatFilter(() => renderFeed(roomId)),
+      fArea: () => openAreaFilter(() => renderFeed(roomId)),
+      fDate: () => openDateFilter(roomId, () => renderFeed(roomId)),
       invite: () => openInvite(room),
       roommenu: () => openRoomMenu(room),
     });
   }
+
+  /* ---------------- 絞り込み ---------------- */
+  function toggleIn(arr, v) { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); }
+  function openCatFilter(done) {
+    const sel = [...state.filters.cats];
+    const draw = () => CATS.map((c) => `<button class="pick${sel.includes(c.id) ? " on" : ""}" data-act="t" data-v="${c.id}">${esc(c.name)}</button>`).join("");
+    const sh = sheet(`<h2>カテゴリで絞り込む</h2><p class="meta">複数選べます</p><div class="picks" id="pk">${draw()}</div>
+      <div class="row" style="margin-top:18px"><button class="btn sub" data-act="clr" style="flex:1">選択を外す</button><button class="btn" data-act="ok" style="flex:2">この条件で見る</button></div>`, {
+      t: (el) => { toggleIn(sel, el.dataset.v); sh.el.querySelector("#pk").innerHTML = draw(); },
+      clr: () => { sel.length = 0; sh.el.querySelector("#pk").innerHTML = draw(); },
+      ok: (_a, close) => { state.filters.cats = sel; close(); done(); },
+    });
+  }
+  function openAreaFilter(done) {
+    const lines = [...state.filters.lines], extra = [...state.filters.extra];
+    const draw = () => AREAS.map((g) => `<div class="pick-group">${esc(g.group)}</div><div class="picks">${g.lines.map((l) =>
+      l.id === "pref"
+        ? `</div><div class="pick-group">${esc(l.name)}</div><div class="picks">${l.stations.map((st) => `<button class="pick sm${extra.includes(st) ? " on" : ""}" data-act="x" data-v="${st}">${esc(st)}</button>`).join("")}`
+        : `<button class="pick${lines.includes(l.id) ? " on" : ""}" data-act="l" data-v="${l.id}">${esc(l.name)}</button>`).join("")}</div>`).join("");
+    const sh = sheet(`<h2>沿線・エリアで絞り込む</h2><p class="meta">複数選べます。同じ駅を通るほかの路線の募集も表示されます</p><div id="ak">${draw()}</div>
+      <div class="row sheet-foot"><button class="btn sub" data-act="clr" style="flex:1">選択を外す</button><button class="btn" data-act="ok" style="flex:2">この条件で見る</button></div>`, {
+      l: (el) => { toggleIn(lines, el.dataset.v); sh.el.querySelector("#ak").innerHTML = draw(); },
+      x: (el) => { toggleIn(extra, el.dataset.v); sh.el.querySelector("#ak").innerHTML = draw(); },
+      clr: () => { lines.length = 0; extra.length = 0; sh.el.querySelector("#ak").innerHTML = draw(); },
+      ok: (_a, close) => { state.filters.lines = lines; state.filters.extra = extra; close(); done(); },
+    });
+  }
+  function openDateFilter(roomId, done) {
+    const today = dayStart(new Date());
+    let month = new Date(today.getFullYear(), today.getMonth(), 1);
+    const setDate = (from, days, label, close) => { state.filters.date = { from: from.toISOString(), to: addDays(from, days).toISOString(), label }; close(); done(); };
+    const md = (d) => `${d.getMonth() + 1}/${d.getDate()}(${"日月火水木金土"[d.getDay()]})`;
+    async function drawCal(el) {
+      const start = month, end = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+      const f = state.filters;
+      const posts = await S.listPosts({ roomId, kind: "recruit", categories: f.cats, stations: filterStations(), from: start.toISOString(), to: end.toISOString() });
+      const count = {};
+      posts.filter((p) => !blocked.has(p.author_id) && p.status === "open").forEach((p) => { const k = dayStart(p.activity_date).getTime(); count[k] = (count[k] || 0) + 1; });
+      let cells = "";
+      for (let i = 0; i < start.getDay(); i++) cells += "<span></span>";
+      for (let d = 1; d <= new Date(end - 1).getDate(); d++) {
+        const day = new Date(month.getFullYear(), month.getMonth(), d), k = day.getTime(), n = count[k] || 0;
+        const past = day < today;
+        cells += `<button class="day${n ? " has" : ""}${k === today.getTime() ? " today" : ""}" ${past ? "disabled" : `data-act="day" data-t="${k}"`}><span>${d}</span>${n ? `<i>${n}</i>` : ""}</button>`;
+      }
+      el.innerHTML = `<div class="cal-head"><button class="icon-btn" data-act="prev" aria-label="前の月" ${month <= new Date(today.getFullYear(), today.getMonth(), 1) ? "disabled" : ""}>${icon("back")}</button>
+        <b>${month.getFullYear()}年${month.getMonth() + 1}月</b>
+        <button class="icon-btn" data-act="next" aria-label="次の月" style="transform:scaleX(-1)">${icon("back")}</button></div>
+        <div class="cal">${"日月火水木金土".split("").map((w) => `<span class="wk">${w}</span>`).join("")}${cells}</div>
+        <p class="hint">数字は、その日に募集中の仲間募集の数です</p>`;
+    }
+    const sat = addDays(today, (6 - today.getDay() + 7) % 7);
+    const sh = sheet(`<h2>日付で探す</h2>
+      <div class="picks" style="margin:10px 0 16px">
+        <button class="pick" data-act="q" data-q="today">今日</button>
+        <button class="pick" data-act="q" data-q="tomorrow">明日</button>
+        <button class="pick" data-act="q" data-q="weekend">今週末</button>
+        <button class="pick" data-act="q" data-q="week">7日以内</button>
+        ${state.filters.date ? '<button class="pick" data-act="q" data-q="none">指定しない</button>' : ""}
+      </div><div id="calBox"><div class="loading">読み込み中…</div></div>`, {
+      q: (el, close) => {
+        const q = el.dataset.q;
+        if (q === "none") { state.filters.date = null; close(); done(); }
+        else if (q === "today") setDate(today, 1, "今日", close);
+        else if (q === "tomorrow") setDate(addDays(today, 1), 1, "明日", close);
+        else if (q === "weekend") setDate(today.getDay() === 0 ? today : sat, today.getDay() === 0 ? 1 : 2, "今週末", close);
+        else setDate(today, 7, "7日以内", close);
+      },
+      prev: async () => { month = new Date(month.getFullYear(), month.getMonth() - 1, 1); await drawCal(sh.el.querySelector("#calBox")); },
+      next: async () => { month = new Date(month.getFullYear(), month.getMonth() + 1, 1); await drawCal(sh.el.querySelector("#calBox")); },
+      day: (el, close) => { const d = new Date(Number(el.dataset.t)); setDate(d, 1, md(d), close); },
+    });
+    guard(() => drawCal(sh.el.querySelector("#calBox")));
+  }
+
+  /* ---------------- プロフィール ---------------- */
+  async function openProfile(uid, roomId) {
+    if (!uid) return;
+    const [pr, members] = await Promise.all([S.getPublicProfile(uid), roomId ? S.getRoomMembers(roomId).catch(() => []) : Promise.resolve([])]);
+    if (!pr) { toast("このユーザーは見つかりません"); return; }
+    const rm = members.find((m) => m.user_id === uid);
+    const mine = uid === S.userId();
+    const since = pr.created_at ? `${new Date(pr.created_at).getFullYear()}年${new Date(pr.created_at).getMonth() + 1}月から利用` : "";
+    const tags = [ageName(pr.age_range), pr.gender && pr.gender !== "none" ? genderName(pr.gender) : "", since].filter(Boolean);
+    sheet(`<div class="prof">
+        ${avatar(pr, false).replace('class="avatar"', 'class="avatar lg"')}
+        <h2>${esc((rm && rm.nickname) || pr.display_name)}</h2>
+        ${rm && rm.nickname ? `<p class="meta">公開名：${esc(pr.display_name)}</p>` : ""}
+        <div class="tags">${tags.map((t) => `<span>${esc(t)}</span>`).join("")}</div>
+      </div>
+      <div class="stats"><div><b>${pr.hosted_count || 0}</b><span>主催した回数</span></div><div><b>${pr.joined_count || 0}</b><span>参加した回数</span></div></div>
+      ${rm && rm.bio ? `<p class="body" style="margin-top:14px">${esc(rm.bio)}</p>` : pr.bio ? `<p class="body" style="margin-top:14px">${esc(pr.bio)}</p>` : ""}
+      <p class="hint" style="margin-top:12px">回数は、終わったイベントで参加が決まっていたものだけを数えています</p>
+      ${mine ? "" : `<div class="row" style="margin-top:16px"><button class="btn sub sm" data-act="rep">${icon("flag")}通報</button><button class="btn sub sm" data-act="blk">${icon("ban")}ブロック</button></div>`}`, {
+      rep: (_a, close) => { close(); openReport("user", uid); },
+      blk: (_a, close) => { close(); openBlock({ id: uid, display_name: pr.display_name }); },
+    });
+  }
+  const needProfile = () => { if (!me || !me.age_range) throw new Error("先にマイページで年代を設定してください（安心して使うための最低限の情報です）"); };
 
   /* ---------------- 投稿の詳細 ---------------- */
   async function renderPost(id) {
@@ -323,6 +462,7 @@
     const mine = p.author_id === S.userId();
     const isRec = p.kind === "recruit";
     const [comments, requests] = await Promise.all([S.listComments(id), isRec && mine ? S.listRequests(id) : Promise.resolve([])]);
+    if (p.room_id) { const ms = await S.getRoomMembers(p.room_id).catch(() => []); const m = ms.find((x) => x.user_id === p.author_id); if (m && m.nickname) p.nick = m.nickname; }
     const member = isRec && (mine || p.my_request_status === "approved");
     const ended = isEnded(p);
     let members = [], photos = [], consents = [];
@@ -331,12 +471,12 @@
 
     let memoryPanel = "";
     if (member && ended) {
-      const okNames = members.map((m) => `<span class="${consents.includes(m.id) ? "ok" : "ng"}">${consents.includes(m.id) ? "" : "・"} ${esc(m.display_name)}</span>`).join("");
+      const okNames = members.map((m) => `<span class="${consents.includes(m.id) ? "ok" : "ng"}">${consents.includes(m.id) ? "✓" : "・"} ${esc(m.display_name)}</span>`).join("");
       memoryPanel = `<div class="sec-title">おもいで</div>
         <div class="card">
           <p><b>おつかれさまでした！</b></p>
           <p class="meta">当日の写真をみんなで集めて、コラージュにしよう。写真は参加メンバーだけが見られます。</p>
-          <div class="album">${photos.map((ph) => `<div class="ph"><img src="${esc(ph.url)}" alt="">${ph.uploader_id === S.userId() ? `<button data-act="delPhoto" data-id="${ph.id}" aria-label="削除"></button>` : ""}</div>`).join("")}
+          <div class="album">${photos.map((ph) => `<div class="ph"><img src="${esc(ph.url)}" alt="">${ph.uploader_id === S.userId() ? `<button data-act="delPhoto" data-id="${ph.id}" aria-label="削除">×</button>` : ""}</div>`).join("")}
             <label class="ph add">${icon("camera")}<span>写真を追加</span><input type="file" accept="image/*" multiple id="albumInput" hidden></label>
           </div>
           <button class="btn block" data-act="collage" style="margin-top:12px" ${photos.length ? "" : "disabled"}>コラージュをつくる</button>
@@ -352,7 +492,8 @@
     if (isRec && mine) {
       const pending = requests.filter((r) => r.status === "pending");
       const others = requests.filter((r) => r.status !== "pending");
-      const reqRow = (r) => `<div class="cmt">${avatar(r.user, true)}<div class="txt"><b>${esc(r.user.display_name)}</b>${statusPill(r.status)}
+      const reqRow = (r) => `<div class="cmt"><button class="who-btn" data-act="profile" data-uid="${r.user.id}">${avatar(r.user, true)}</button><div class="txt"><button class="name-btn" data-act="profile" data-uid="${r.user.id}">${esc(r.user.display_name)}</button>${statusPill(r.status)}
+          <div class="trust">${[trustText(r.user), `主催${r.user.hosted_count || 0}回`, `参加${r.user.joined_count || 0}回`].filter(Boolean).map((t) => `<span>${esc(t)}</span>`).join("")}</div>
           ${r.message ? `<div class="body" style="font-size:.9rem">${esc(r.message)}</div>` : ""}
           ${r.status === "pending" ? `<div class="row" style="margin-top:6px"><button class="btn sm green" data-act="approve" data-id="${r.id}">参加OK</button><button class="btn sm ghost" data-act="reject" data-id="${r.id}">見送る</button></div>` : ""}
         </div></div>`;
@@ -422,7 +563,7 @@
         const file = new File([blob], "domate-collage.jpg", { type: "image/jpeg" });
         sheet(`<h2>コラージュができました</h2>
           <img src="${url}" alt="コラージュ" style="border-radius:14px;margin:10px 0;box-shadow:var(--shadow)">
-          <div class="consent" style="margin-bottom:10px"><span class="meta">外部へのシェアOK：</span>${members.map((m) => `<span class="${consents.includes(m.id) ? "ok" : "ng"}">${consents.includes(m.id) ? "" : "・"} ${esc(m.display_name)}</span>`).join("")}</div>
+          <div class="consent" style="margin-bottom:10px"><span class="meta">外部へのシェアOK：</span>${members.map((m) => `<span class="${consents.includes(m.id) ? "ok" : "ng"}">${consents.includes(m.id) ? "✓" : "・"} ${esc(m.display_name)}</span>`).join("")}</div>
           <button class="btn ${iOk ? "ghost" : "green"} block" data-act="consent">${iOk ? "シェアOKを取り消す" : "私はシェアOK！"}</button>
           ${allOk ? `<div class="row" style="margin-top:10px">
               <button class="btn" style="flex:1" data-act="share">${icon("share")}シェア</button>
@@ -439,7 +580,7 @@
           post: (_a, close) => { pendingCollage = { blob, from: p }; close(); location.hash = `#/new?kind=experience&from=${p.id}&collage=1`; },
         });
       },
-      join: async (f) => { await S.requestJoin(p.id, f.message.value.trim()); toast("参加を申請しました"); renderPost(id); },
+      join: async (f) => { needProfile(); await S.requestJoin(p.id, f.message.value.trim()); toast("参加を申請しました"); renderPost(id); },
       comment: async (f) => { const v = f.body.value.trim(); if (!v) return; await S.addComment(p.id, v); renderPost(id); },
     });
     const albumInput = document.getElementById("albumInput");
@@ -498,13 +639,15 @@
     let imageBlob = null;
     const fromId = q.get("from");
     const from = fromId ? await S.getPost(fromId) : null;
-    let pre = { title: "", body: "", room: preRoom };
+    let pre = { title: "", body: "", room: preRoom, category: "", line: "", station: "" };
     if (from) {
       pre.room = from.room_id || preRoom;
+      Object.assign(pre, { category: from.category || "", line: from.line || "", station: from.station || "" });
       if (kind === "recruit") pre = { ...pre, title: `私も「${from.title.replace(/[「」]/g, "").replace(/のおもいで$/, "")}」やりたい！`.slice(0, 60), body: `${from.author.display_name}さんの投稿を見て、やってみたくなりました！` };
       else pre = { ...pre, title: `「${from.title}」のおもいで`.slice(0, 60) };
       if (q.get("collage") && pendingCollage && pendingCollage.from.id === from.id) imageBlob = pendingCollage.blob;
     }
+    let category = pre.category;
     const minDate = new Date(Date.now() + 3600e3 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     const body = `<form data-form="post" id="postForm">
       <div class="kind-pick">
@@ -512,23 +655,30 @@
         <button type="button" data-act="kind" data-k="recruit" class="${kind === "recruit" ? "on" : ""}"><b>仲間募集</b><div class="k-sub">一緒にやる人を探す</div></button>
       </div>
 
+      <label class="f">カテゴリ</label>
+      <div class="picks" id="catPick">${CATS.map((c) => `<button type="button" class="pick${pre.category === c.id ? " on" : ""}" data-act="cat" data-v="${c.id}">${esc(c.name)}</button>`).join("")}</div>
+
       <label class="f">タイトル</label>
       <input class="input" name="title" maxlength="60" required value="${esc(pre.title)}" placeholder="${kind === "recruit" ? "例：週末にボルダリング行く人！" : "例：初めて陶芸体験してきた"}">
 
       <label class="f">内容 <small>（任意）</small></label>
       <textarea class="input" name="body" maxlength="2000" placeholder="どんなことをした？どうだった？">${esc(pre.body)}</textarea>
 
+      <label class="f">エリア <small id="areaReq">（任意）</small></label>
+      <div class="area-sel">
+        <select class="input" name="line" id="lineSel"><option value="">路線・エリアを選ぶ</option>${AREAS.map((g) => `<optgroup label="${esc(g.group)}">${g.lines.map((l) => `<option value="${l.id}" ${pre.line === l.id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</optgroup>`).join("")}</select>
+        <select class="input" name="station" id="stSel"></select>
+      </div>
+
       <label class="f">写真 <small>（任意）</small></label>
       <input type="file" accept="image/*" name="photo" id="photo" class="input">
-      <div id="preview">${imageBlob ? `<div class="preview"><img class="photo" src="${URL.createObjectURL(imageBlob)}" alt=""><button type="button" data-act="rmPhoto"></button></div>` : ""}</div>
+      <div id="preview">${imageBlob ? `<div class="preview"><img class="photo" src="${URL.createObjectURL(imageBlob)}" alt=""><button type="button" data-act="rmPhoto" aria-label="写真を外す">×</button></div>` : ""}</div>
 
       <div id="recFields" style="display:${kind === "recruit" ? "block" : "none"}">
         <label class="f">日時</label>
         <input class="input" type="datetime-local" name="date" min="${minDate}">
         <label class="f">終了予定 <small>（任意。過ぎるとみんなでコラージュが作れます）</small></label>
         <input class="input" type="datetime-local" name="end" min="${minDate}">
-        <label class="f">エリア <small>（駅名や地域くらいの大まかさで）</small></label>
-        <input class="input" name="area" maxlength="40" placeholder="例：渋谷、横浜駅周辺、オンライン">
         <label class="f">募集人数 <small>（あなた以外に何人？）</small></label>
         <input class="input" type="number" name="capacity" min="1" max="100" value="2">
         <label class="f">参加条件 <small>（任意）</small></label>
@@ -552,7 +702,9 @@
         document.querySelectorAll(".kind-pick button").forEach((b) => b.classList.toggle("on", b.dataset.k === kind));
         document.getElementById("recFields").style.display = kind === "recruit" ? "block" : "none";
         document.querySelector("[name=title]").placeholder = kind === "recruit" ? "例：週末にボルダリング行く人！" : "例：初めて陶芸体験してきた";
+        document.getElementById("areaReq").textContent = kind === "recruit" ? "" : "（任意）";
       },
+      cat: (el) => { category = category === el.dataset.v ? "" : el.dataset.v; document.querySelectorAll("#catPick .pick").forEach((b) => b.classList.toggle("on", b.dataset.v === category)); },
       rmPhoto: () => { imageBlob = null; document.getElementById("photo").value = ""; document.getElementById("preview").innerHTML = ""; },
       post: async (f) => {
         const vis = f.vis.value;
@@ -561,14 +713,19 @@
           visibility: vis === "public" ? "public" : "room", room_id: vis === "public" ? null : vis,
         };
         if (from) data.source_post_id = from.id;
+        if (!category) throw new Error("カテゴリを選んでください");
         if (!data.title) throw new Error("タイトルを入れてください");
+        data.category = category;
+        if (f.line.value && f.station.value) Object.assign(data, { line: f.line.value, station: f.station.value, area: f.station.value });
         if (kind === "recruit") {
+          needProfile();
           if (!f.date.value) throw new Error("日時を入れてください");
+          if (!data.station) throw new Error("エリア（路線と駅）を選んでください");
           if (f.end.value && new Date(f.end.value) <= new Date(f.date.value)) throw new Error("終了予定は開始より後にしてください");
           const cap = parseInt(f.capacity.value, 10);
           if (!(cap >= 1 && cap <= 100)) throw new Error("募集人数は1〜100人で入れてください");
           Object.assign(data, {
-            activity_date: new Date(f.date.value).toISOString(), area: f.area.value.trim() || null,
+            activity_date: new Date(f.date.value).toISOString(),
             end_at: f.end.value ? new Date(f.end.value).toISOString() : null,
             capacity: cap, conditions: f.conditions.value.trim() || null, status: "open",
           });
@@ -578,10 +735,20 @@
         toast("投稿しました"); location.hash = "#/post/" + r.id;
       },
     });
+    const lineSel = document.getElementById("lineSel"), stSel = document.getElementById("stSel");
+    const fillStations = (keep) => {
+      const l = lineById(lineSel.value);
+      stSel.innerHTML = l ? `<option value="">${l.id === "pref" ? "都道府県を選ぶ" : l.id === "online" ? "" : "駅を選ぶ"}</option>` + l.stations.map((st) => `<option ${keep === st ? "selected" : ""}>${esc(st)}</option>`).join("") : '<option value="">先に路線を選ぶ</option>';
+      if (l && l.id === "online") stSel.value = "オンライン";
+      stSel.disabled = !l;
+    };
+    fillStations(pre.station);
+    lineSel.addEventListener("change", () => fillStations());
+    if (kind === "recruit") document.getElementById("areaReq").textContent = "";
     document.getElementById("photo").addEventListener("change", (e) => guard(async () => {
       const file = e.target.files[0]; if (!file) return;
       imageBlob = await resizeImage(file, S.mode === "demo" ? 800 : 1280);
-      document.getElementById("preview").innerHTML = `<div class="preview"><img class="photo" src="${URL.createObjectURL(imageBlob)}" alt=""><button type="button" data-act="rmPhoto"></button></div>`;
+      document.getElementById("preview").innerHTML = `<div class="preview"><img class="photo" src="${URL.createObjectURL(imageBlob)}" alt=""><button type="button" data-act="rmPhoto" aria-label="写真を外す">×</button></div>`;
     }));
   }
 
@@ -677,7 +844,8 @@
   /* ---------------- マイページ ---------------- */
   async function renderMe() {
     me = await S.getMyProfile();
-    const [blocks, myPosts] = await Promise.all([S.listBlocks(), S.listMyPosts()]);
+    const [blocks, myPosts, pub, myRooms] = await Promise.all([S.listBlocks(), S.listMyPosts(), S.getPublicProfile(S.userId()), S.listMyRooms()]);
+    const roomProfiles = await Promise.all(myRooms.map(async (r) => ({ room: r, m: ((await S.getRoomMembers(r.id).catch(() => [])).find((x) => x.user_id === S.userId())) || {} })));
     const demo = S.mode === "demo" ? `<div class="sec-title">デモ用の設定</div>
       <div class="card">
         <label class="f" style="margin-top:0">別のユーザーになって試す</label>
@@ -685,19 +853,29 @@
         <p class="hint">「そうた」になって自分の募集に申請する、などの流れを確認できます</p>
         <button class="btn sm ghost" data-act="reset" style="margin-top:12px">デモのデータを最初に戻す</button>
       </div>` : "";
-    const body = `<div class="card" style="text-align:center">
-        <div style="display:flex;justify-content:center;margin-bottom:6px">${avatar(me)}</div>
-        <b style="font-size:1.1rem">${esc(me.display_name)}</b>
-        ${me.bio ? `<p class="meta">${esc(me.bio)}</p>` : ""}
+    const opt = (list, cur, blank) => (blank ? `<option value="">${blank}</option>` : "") + list.map((x) => `<option value="${x.id}" ${cur === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("");
+    const body = `<div class="card me-card">
+        <div class="prof">${avatar(me).replace('class="avatar"', 'class="avatar lg"')}<h2>${esc(me.display_name)}</h2>
+          <div class="tags">${[ageName(me.age_range), me.gender !== "none" ? genderName(me.gender) : ""].filter(Boolean).map((t) => `<span>${esc(t)}</span>`).join("")}</div></div>
+        <div class="stats"><div><b>${(pub && pub.hosted_count) || 0}</b><span>主催した回数</span></div><div><b>${(pub && pub.joined_count) || 0}</b><span>参加した回数</span></div></div>
+        <button class="btn sub sm block" data-act="preview" style="margin-top:14px">ほかの人からの見え方を確認</button>
       </div>
-      <div class="sec-title">プロフィール</div>
+      ${me.age_range ? "" : '<div class="card warn">年代を設定すると、仲間募集への投稿や参加申請ができるようになります</div>'}
+      <div class="sec-title">公開プロフィール <span class="meta">募集や申請のときに相手に見えます</span></div>
       <form class="card" data-form="profile">
         <label class="f" style="margin-top:0">表示名 <small>（本名は避けるのがおすすめ）</small></label>
         <input class="input" name="name" maxlength="20" required value="${esc(me.display_name)}">
+        <div class="two">
+          <div><label class="f">年代</label><select class="input" name="age" required>${opt(AGES, me.age_range, "選んでください")}</select></div>
+          <div><label class="f">性別</label><select class="input" name="gender">${opt(GENDERS, me.gender || "none")}</select></div>
+        </div>
         <label class="f">ひとこと</label>
         <input class="input" name="bio" maxlength="160" value="${esc(me.bio || "")}" placeholder="好きなこと、最近ハマってること">
+        <p class="hint">主催・参加の回数は自動で表示されます。生年月日や学校名などは載りません</p>
         <button class="btn block" type="submit" style="margin-top:14px">保存する</button>
       </form>
+      <div class="sec-title">ルームでの名前 <span class="meta">そのルームのメンバーにだけ見えます</span></div>
+      <div class="card">${roomProfiles.map(({ room, m }) => `<div class="cmt" style="align-items:center"><div class="txt"><b>${esc(room.name)}</b><div class="meta">${m.nickname ? `「${esc(m.nickname)}」で表示中` : "公開プロフィールの名前で表示中"}</div></div><button class="btn sm sub" data-act="roomProf" data-id="${room.id}">編集</button></div>`).join("") || '<p class="meta">参加しているルームはまだありません</p>'}</div>
       <div class="sec-title">あなたの投稿 <span class="meta">${myPosts.length}</span></div>
       ${myPosts.map((p) => postCard(p)).join("") || '<div class="card"><p class="meta">まだ投稿していません</p></div>'}
       <div class="sec-title">ブロック中のユーザー</div>
@@ -714,7 +892,17 @@
       <p class="meta" style="text-align:center;margin:20px 0">domate by Cherrish</p>`;
     setView(layout({ title: "マイページ", body, active: "me" }), {
       like: likeHandler,
-      profile: async (f) => { await S.updateProfile({ display_name: f.name.value.trim(), bio: f.bio.value.trim() }); toast("保存しました"); renderMe(); },
+      profile: async (f) => { await S.updateProfile({ display_name: f.name.value.trim(), bio: f.bio.value.trim(), age_range: f.age.value || null, gender: f.gender.value }); toast("保存しました"); renderMe(); },
+      preview: () => openProfile(S.userId()),
+      roomProf: (el) => {
+        const rp = roomProfiles.find((x) => x.room.id === el.dataset.id);
+        sheet(`<h2>「${esc(rp.room.name)}」での名前</h2><p class="meta">空欄にすると公開プロフィールの名前で表示されます</p>
+          <form data-form="save"><label class="f">ニックネーム</label><input class="input" name="nick" maxlength="20" value="${esc(rp.m.nickname || "")}" placeholder="${esc(me.display_name)}">
+          <label class="f">ひとこと</label><input class="input" name="bio" maxlength="160" value="${esc(rp.m.bio || "")}" placeholder="例：ゼミの写真係">
+          <button class="btn block" type="submit" style="margin-top:16px">保存する</button></form>`, {
+          save: async (f, close) => { await S.updateRoomProfile(rp.room.id, { nickname: f.nick.value.trim() || null, bio: f.bio.value.trim() || null }); close(); toast("保存しました"); renderMe(); },
+        });
+      },
       unblock: async (el) => { await S.unblock(el.dataset.id); blocked.delete(el.dataset.id); toast("解除しました"); renderMe(); },
       reset: async () => { await S.resetDemo(); me = null; await refreshBlocks(); toast("デモのデータを戻しました"); location.hash = "#/"; },
       logout: async () => { await S.signOut(); me = null; location.hash = "#/"; route(); },
@@ -730,7 +918,12 @@
       <div class="hero"><h1><span class="brand"><span class="dot" style="width:22px;height:22px;box-shadow:7px -7px 0 -5px var(--leaf)"></span>domate</span></h1><p>やりたいことを、一緒にやる仲間と。</p></div>
       <div class="seg"><button class="${signup ? "" : "on"}" data-act="tab" data-t="login">ログイン</button><button class="${signup ? "on" : ""}" data-act="tab" data-t="signup">新規登録</button></div>
       <form data-form="${signup ? "signup" : "login"}">
-        ${signup ? `<label class="f">表示名 <small>（ニックネームがおすすめ）</small></label><input class="input" name="name" maxlength="20" required>` : ""}
+        ${signup ? `<label class="f">表示名 <small>（ニックネームがおすすめ）</small></label><input class="input" name="name" maxlength="20" required>
+          <div class="two">
+            <div><label class="f">年代</label><select class="input" name="age" required><option value="">選んでください</option>${AGES.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select></div>
+            <div><label class="f">性別</label><select class="input" name="gender">${GENDERS.map((g) => `<option value="${g.id}" ${g.id === "none" ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select></div>
+          </div>
+          <p class="hint">年代と性別は、募集のときに相手が安心できるよう公開プロフィールに表示されます（性別は「回答しない」も選べます）</p>` : ""}
         <label class="f">メールアドレス</label><input class="input" type="email" name="email" required autocomplete="email">
         <label class="f">パスワード ${signup ? "<small>（6文字以上）</small>" : ""}</label><input class="input" type="password" name="password" minlength="6" required autocomplete="${signup ? "new-password" : "current-password"}">
         ${signup ? `<div class="rules"><b>domate のルール</b><ul>
@@ -752,7 +945,7 @@
       signup: async (f) => {
         if (!f.agree.checked) throw new Error("ルールへの同意が必要です");
         try {
-          const r = await S.signUp({ email: f.email.value.trim(), password: f.password.value, displayName: f.name.value.trim() });
+          const r = await S.signUp({ email: f.email.value.trim(), password: f.password.value, displayName: f.name.value.trim(), gender: f.gender.value, ageRange: f.age.value });
           if (r.needsConfirm) {
             setView(`<div class="auth"><div class="empty"><div class="big"></div><p><b>確認メールを送りました</b><br>メールのリンクを開くと登録が完了します。<br>その後、ここからログインしてください。</p>
               <button class="btn" style="margin-top:16px" data-act="tab" data-t="login">ログイン画面へ</button></div></div>`, { tab: (el) => renderAuth(el.dataset.t) });

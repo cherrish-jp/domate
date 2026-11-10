@@ -8,7 +8,7 @@
      デモモード
      ========================================================= */
   function LocalStore() {
-    const KEY = "domate-demo-v2";
+    const KEY = "domate-demo-v3";
     const iso = (t) => new Date(t).toISOString();
     const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     const H = 3600e3, D = 24 * H;
@@ -35,26 +35,26 @@
       return {
         me: "u_me",
         profiles: [
-          { id: "u_me", display_name: "あなた", bio: "" },
-          { id: "u_a", display_name: "はるか", bio: "週末は山とカフェ" },
-          { id: "u_b", display_name: "そうた", bio: "ボドゲと料理が好き" },
-          { id: "u_c", display_name: "みお", bio: "写真とおさんぽ" },
+          { id: "u_me", display_name: "あなた", bio: "", gender: "none", age_range: "20s", created_at: iso(now - 30 * D) },
+          { id: "u_a", display_name: "はるか", bio: "週末は山とカフェ", gender: "female", age_range: "20s", created_at: iso(now - 60 * D) },
+          { id: "u_b", display_name: "そうた", bio: "ボドゲと料理が好き", gender: "male", age_range: "20s", created_at: iso(now - 45 * D) },
+          { id: "u_c", display_name: "みお", bio: "写真とおさんぽ", gender: "female", age_range: "30s", created_at: iso(now - 20 * D) },
         ],
         rooms: [
           { id: "r1", name: "ゼミの仲間", description: "ゼミメンバーだけの部屋", invite_code: "zemi2026", owner_id: "u_me", created_at: iso(now - 5 * D) },
         ],
         room_members: [
           { room_id: "r1", user_id: "u_me", role: "owner" },
-          { room_id: "r1", user_id: "u_a", role: "member" },
+          { room_id: "r1", user_id: "u_a", role: "member", nickname: "はるちゃん", bio: "ゼミの写真係" },
         ],
         posts: [
-          { id: "p1", author_id: "u_a", kind: "experience", title: "早起きして山頂で朝焼けを見た", body: "朝5時に出発して、山頂で朝焼けを見てきました。寒かったけど、空がピンクからオレンジに変わっていくのが本当にきれいで、早起きした甲斐があった…！下山後の朝ごはんも最高でした。", visibility: "public", room_id: null, created_at: iso(now - 3 * H) },
-          { id: "p2", author_id: "u_b", kind: "recruit", title: "今週末ボードゲームカフェ行く人！", body: "気になってたボドゲカフェに行きたいけど、一人だとハードルが高くて…。ゆるく遊べる人募集です！", visibility: "public", room_id: null, activity_date: at(3, 14), area: "渋谷", capacity: 3, conditions: "初心者歓迎・ルールは教えます", status: "open", created_at: iso(now - 6 * H) },
-          { id: "p3", author_id: "u_c", kind: "experience", title: "商店街の食べ歩きスタンプラリー", body: "地元の商店街でやってたスタンプラリーに参加。コロッケ、たい焼き、みたらし団子…全部制覇しました。お店の人と話せるのも楽しかった！", visibility: "public", room_id: null, created_at: iso(now - 1 * D) },
-          { id: "p4", author_id: "u_me", kind: "recruit", title: "朝ヨガ一緒にやりませんか", body: "公園で朝ヨガを始めたいです。一緒にやってくれる人がいたら続けられそう！", visibility: "public", room_id: null, activity_date: at(5, 7), area: "代々木公園", capacity: 4, conditions: "手ぶらOK・朝7時集合", status: "open", created_at: iso(now - 2 * D) },
-          { id: "p5", author_id: "u_a", kind: "experience", title: "ゼミ後に行ったカレー屋が最高だった", body: "駅の裏のスパイスカレー屋さん、みんなで行ったら大当たりでした。次は辛さ5に挑戦したい。", visibility: "room", room_id: "r1", created_at: iso(now - 2 * H) },
-          { id: "p8", author_id: "u_b", kind: "recruit", title: "ボウリングで本気の3ゲーム勝負", body: "負けた人がジュースおごりで！ゆるく本気でやりましょう。", visibility: "public", room_id: null, activity_date: at(-2, 18), end_at: at(-2, 21), area: "池袋", capacity: 3, conditions: "スコア100以下でも大歓迎", status: "closed", created_at: iso(now - 6 * D) },
-          { id: "p6", author_id: "u_c", kind: "recruit", title: "フィルムカメラでおさんぽしませんか", body: "古い街並みをのんびり歩きながら写真を撮りたいです。", visibility: "public", room_id: null, activity_date: at(9, 10), area: "谷中", capacity: 2, conditions: "カメラがなくてもOK", status: "open", created_at: iso(now - 3 * D) },
+          { id: "p1", category: "outdoor", line: "oh", station: "伊勢原", author_id: "u_a", kind: "experience", title: "早起きして山頂で朝焼けを見た", body: "朝5時に出発して、山頂で朝焼けを見てきました。寒かったけど、空がピンクからオレンジに変わっていくのが本当にきれいで、早起きした甲斐があった…！下山後の朝ごはんも最高でした。", visibility: "public", room_id: null, created_at: iso(now - 3 * H) },
+          { id: "p2", category: "game", line: "jy", station: "渋谷", author_id: "u_b", kind: "recruit", title: "今週末ボードゲームカフェ行く人！", body: "気になってたボドゲカフェに行きたいけど、一人だとハードルが高くて…。ゆるく遊べる人募集です！", visibility: "public", room_id: null, activity_date: at(3, 14), area: "渋谷", capacity: 3, conditions: "初心者歓迎・ルールは教えます", status: "open", created_at: iso(now - 6 * H) },
+          { id: "p3", category: "food", line: "jc", station: "高円寺", author_id: "u_c", kind: "experience", title: "商店街の食べ歩きスタンプラリー", body: "地元の商店街でやってたスタンプラリーに参加。コロッケ、たい焼き、みたらし団子…全部制覇しました。お店の人と話せるのも楽しかった！", visibility: "public", room_id: null, created_at: iso(now - 1 * D) },
+          { id: "p4", category: "sports", line: "g", station: "表参道", author_id: "u_me", kind: "recruit", title: "朝ランしてからカフェで朝ごはん", body: "週末の朝、軽く5kmくらい走ってから表参道のカフェでモーニングしたいです。一人だと起きられないので…！", visibility: "public", room_id: null, activity_date: at(5, 7), area: "表参道", capacity: 4, conditions: "ゆっくりペース・ラン初心者歓迎", status: "open", created_at: iso(now - 2 * D) },
+          { id: "p5", category: "food", line: "ty", station: "日吉", author_id: "u_a", kind: "experience", title: "ゼミ後に行ったカレー屋が最高だった", body: "駅の裏のスパイスカレー屋さん、みんなで行ったら大当たりでした。次は辛さ5に挑戦したい。", visibility: "room", room_id: "r1", created_at: iso(now - 2 * H) },
+          { id: "p8", category: "sports", line: "jy", station: "池袋", author_id: "u_b", kind: "recruit", title: "ボウリングで本気の3ゲーム勝負", body: "負けた人がジュースおごりで！ゆるく本気でやりましょう。", visibility: "public", room_id: null, activity_date: at(-2, 18), end_at: at(-2, 21), area: "池袋", capacity: 3, conditions: "スコア100以下でも大歓迎", status: "closed", created_at: iso(now - 6 * D) },
+          { id: "p6", category: "walk", line: "jy", station: "日暮里", author_id: "u_c", kind: "recruit", title: "フィルムカメラでおさんぽしませんか", body: "古い街並みをのんびり歩きながら写真を撮りたいです。", visibility: "public", room_id: null, activity_date: at(9, 10), area: "日暮里", capacity: 2, conditions: "カメラがなくてもOK", status: "open", created_at: iso(now - 3 * D) },
         ],
         likes: [
           { post_id: "p1", user_id: "u_b" }, { post_id: "p1", user_id: "u_c" },
@@ -65,13 +65,13 @@
           { id: "c2", post_id: "p3", author_id: "u_b", body: "たい焼きのお店どこですか？", created_at: iso(now - 20 * H) },
         ],
         join_requests: [
-          { id: "j1", post_id: "p4", user_id: "u_a", message: "ヨガ初心者ですが参加したいです！", status: "approved", created_at: iso(now - 30 * H) },
+          { id: "j1", post_id: "p4", user_id: "u_a", message: "走るの久しぶりですが参加したいです！", status: "approved", created_at: iso(now - 30 * H) },
           { id: "j3", post_id: "p8", user_id: "u_me", message: "ボウリング久しぶりです！", status: "approved", created_at: iso(now - 5 * D) },
           { id: "j4", post_id: "p8", user_id: "u_c", message: "行きたい！", status: "approved", created_at: iso(now - 5 * D) },
-          { id: "j2", post_id: "p4", user_id: "u_b", message: "体かたいけど大丈夫ですか？笑", status: "pending", created_at: iso(now - 5 * H) },
+          { id: "j2", post_id: "p4", user_id: "u_b", message: "5kmならいけそうです！", status: "pending", created_at: iso(now - 5 * H) },
         ],
         messages: [
-          { id: "m1", post_id: "p4", author_id: "u_me", body: "参加ありがとうございます！当日は正面入口に集合でお願いします🧘", created_at: iso(now - 28 * H) },
+          { id: "m1", post_id: "p4", author_id: "u_me", body: "参加ありがとうございます！当日は駅の改札前に集合でお願いします", created_at: iso(now - 28 * H) },
           { id: "m2", post_id: "p4", author_id: "u_a", body: "了解です！楽しみにしてます〜", created_at: iso(now - 27 * H) },
         ],
         event_photos: [
@@ -98,7 +98,13 @@
     }
     let db = load();
     const me = () => db.me;
-    const prof = (id) => { const p = db.profiles.find((x) => x.id === id); return p ? { id: p.id, display_name: p.display_name } : { id, display_name: "退会したユーザー" }; };
+    const endT = (p) => (p.end_at ? new Date(p.end_at).getTime() : p.activity_date ? new Date(p.activity_date).getTime() + 3 * H : Infinity);
+    const hostedCount = (uid) => db.posts.filter((p) => p.author_id === uid && p.kind === "recruit" && endT(p) < Date.now() && db.join_requests.some((j) => j.post_id === p.id && j.status === "approved")).length;
+    const joinedCount = (uid) => db.join_requests.filter((j) => j.user_id === uid && j.status === "approved" && (() => { const p = db.posts.find((x) => x.id === j.post_id); return p && endT(p) < Date.now(); })()).length;
+    const prof = (id) => {
+      const p = db.profiles.find((x) => x.id === id);
+      return p ? { id: p.id, display_name: p.display_name, gender: p.gender, age_range: p.age_range, hosted_count: hostedCount(id), joined_count: joinedCount(id) } : { id, display_name: "退会したユーザー" };
+    };
     const isMember = (roomId) => db.room_members.some((m) => m.room_id === roomId && m.user_id === me());
     const canSee = (p) => p && (p.visibility === "public" || p.author_id === me() || (p.room_id && isMember(p.room_id)));
     const memberIds = (p) => [p.author_id, ...db.join_requests.filter((j) => j.post_id === p.id && j.status === "approved").map((j) => j.user_id)];
@@ -133,11 +139,26 @@
       async getMyProfile() { return { ...db.profiles.find((p) => p.id === me()) }; },
       async updateProfile(patch) { Object.assign(db.profiles.find((p) => p.id === me()), patch); save(); },
 
-      async listPosts({ roomId, kind } = {}) {
+      async listPosts({ roomId, kind, categories, stations, from, to } = {}) {
         return db.posts
           .filter((p) => (roomId ? p.room_id === roomId : p.visibility === "public"))
           .filter((p) => !kind || p.kind === kind)
+          .filter((p) => !categories || !categories.length || categories.includes(p.category))
+          .filter((p) => !stations || !stations.length || stations.includes(p.station))
+          .filter((p) => !from || (p.activity_date && p.activity_date >= from && p.activity_date < to))
           .filter(canSee).sort(byNewest).map(decorate);
+      },
+      async getPublicProfile(uid) {
+        const p = db.profiles.find((x) => x.id === uid); if (!p) return null;
+        return { ...prof(uid), bio: p.bio, created_at: p.created_at };
+      },
+      async getRoomMembers(roomId) {
+        need(isMember(roomId), "このルームのメンバーではありません");
+        return db.room_members.filter((m) => m.room_id === roomId).map((m) => ({ user_id: m.user_id, role: m.role, nickname: m.nickname || null, bio: m.bio || null }));
+      },
+      async updateRoomProfile(roomId, patch) {
+        const m = db.room_members.find((x) => x.room_id === roomId && x.user_id === me()); need(m, "このルームのメンバーではありません");
+        Object.assign(m, patch); save();
       },
       async listMyPosts() { return db.posts.filter((p) => p.author_id === me()).sort(byNewest).map(decorate); },
       async getPost(id) { const p = db.posts.find((x) => x.id === id); return canSee(p) ? decorate(p) : null; },
@@ -248,7 +269,7 @@
     const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
     let user = null;
     const POST =
-      "*, author:profiles!posts_author_id_fkey(id,display_name), room:rooms!posts_room_id_fkey(id,name), like_count, liked_by_me, comment_count, approved_count, my_request_status";
+      "*, author:profiles!posts_author_id_fkey(id,display_name,gender,age_range,hosted_count,joined_count), room:rooms!posts_room_id_fkey(id,name), like_count, liked_by_me, comment_count, approved_count, my_request_status";
     const ok = ({ data, error }) => { if (error) throw new Error(friendly(error)); return data; };
     function friendly(e) {
       const m = (e && e.message) || String(e);
@@ -272,10 +293,10 @@
         return user;
       },
       userId: me,
-      async signUp({ email, password, displayName }) {
+      async signUp({ email, password, displayName, gender, ageRange }) {
         const r = await sb.auth.signUp({
           email, password,
-          options: { data: { display_name: displayName, age_confirmed: true }, emailRedirectTo: location.origin + location.pathname },
+          options: { data: { display_name: displayName, age_confirmed: true, gender: gender || "none", age_range: ageRange || "" }, emailRedirectTo: location.origin + location.pathname },
         });
         if (r.error) throw new Error(friendly(r.error));
         user = r.data.session ? r.data.session.user : null;
@@ -291,12 +312,20 @@
       async getMyProfile() { return ok(await sb.from("profiles").select("*").eq("id", me()).single()); },
       async updateProfile(patch) { ok(await sb.from("profiles").update(patch).eq("id", me())); },
 
-      async listPosts({ roomId, kind } = {}) {
-        let q = sb.from("posts").select(POST).order("created_at", { ascending: false }).limit(60);
+      async listPosts({ roomId, kind, categories, stations, from, to } = {}) {
+        let q = sb.from("posts").select(POST).order("created_at", { ascending: false }).limit(100);
         q = roomId ? q.eq("room_id", roomId) : q.eq("visibility", "public");
         if (kind) q = q.eq("kind", kind);
+        if (categories && categories.length) q = q.in("category", categories);
+        if (stations && stations.length) q = q.in("station", stations);
+        if (from) q = q.gte("activity_date", from).lt("activity_date", to);
         return ok(await q);
       },
+      async getPublicProfile(uid) {
+        return ok(await sb.from("profiles").select("id,display_name,bio,gender,age_range,created_at,hosted_count,joined_count").eq("id", uid).maybeSingle());
+      },
+      async getRoomMembers(roomId) { return ok(await sb.from("room_members").select("user_id,role,nickname,bio").eq("room_id", roomId)); },
+      async updateRoomProfile(roomId, patch) { ok(await sb.from("room_members").update(patch).eq("room_id", roomId).eq("user_id", me())); },
       async listMyPosts() { return ok(await sb.from("posts").select(POST).eq("author_id", me()).order("created_at", { ascending: false })); },
       async getPost(id) { return ok(await sb.from("posts").select(POST).eq("id", id).maybeSingle()); },
       async createPost(data, imageBlob) {
@@ -321,7 +350,7 @@
 
       async requestJoin(postId, message) { ok(await sb.from("join_requests").insert({ post_id: postId, user_id: me(), message })); },
       async cancelJoin(postId) { ok(await sb.from("join_requests").delete().eq("post_id", postId).eq("user_id", me())); },
-      async listRequests(postId) { return ok(await sb.from("join_requests").select("*, user:profiles(id,display_name)").eq("post_id", postId).order("created_at")); },
+      async listRequests(postId) { return ok(await sb.from("join_requests").select("*, user:profiles(id,display_name,gender,age_range,hosted_count,joined_count)").eq("post_id", postId).order("created_at")); },
       async setRequestStatus(id, status) { ok(await sb.from("join_requests").update({ status }).eq("id", id)); },
       async listMyRequests() { return ok(await sb.from("join_requests").select("*, post:posts!join_requests_post_id_fkey(id,title,activity_date,end_at,area)").eq("user_id", me()).order("created_at", { ascending: false })); },
 
