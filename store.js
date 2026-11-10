@@ -248,7 +248,7 @@
     const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
     let user = null;
     const POST =
-      "*, author:profiles(id,display_name), room:rooms(id,name), like_count, liked_by_me, comment_count, approved_count, my_request_status";
+      "*, author:profiles!posts_author_id_fkey(id,display_name), room:rooms!posts_room_id_fkey(id,name), like_count, liked_by_me, comment_count, approved_count, my_request_status";
     const ok = ({ data, error }) => { if (error) throw new Error(friendly(error)); return data; };
     function friendly(e) {
       const m = (e && e.message) || String(e);
