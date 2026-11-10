@@ -10,7 +10,7 @@
 
   /* ---------------- 小さな道具 ---------------- */
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const COLORS = ["#e2574c", "#f08a5d", "#5bae5b", "#6c9bd2", "#b58ad9", "#e58fb0", "#d9a441"];
+  const COLORS = ["#ff3b1f", "#1f3bff", "#00a35c", "#ff9f0a", "#000000", "#ff4fa0", "#7a3cff"];
   function avatar(user, sm) {
     const name = (user && user.display_name) || "?";
     let h = 0; for (const ch of (user && user.id) || name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -108,14 +108,14 @@
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
     const g = c.getContext("2d");
-    const FONT = '"Zen Kaku Gothic New", "Hiragino Sans", sans-serif';
-    g.fillStyle = "#f2f3ef"; g.fillRect(0, 0, W, H);
+    const FONT = '"Murecho", "Hiragino Sans", sans-serif';
+    g.fillStyle = "#ffffff"; g.fillRect(0, 0, W, H);
     // 見出し
-    g.fillStyle = "#1f2420"; g.font = `700 54px ${FONT}`; g.textBaseline = "alphabetic";
+    g.fillStyle = "#000000"; g.font = `800 54px ${FONT}`; g.textBaseline = "alphabetic";
     const lines = wrapLines(g, p.title, W - 140, 2);
     lines.forEach((l, i) => g.fillText(l, 70, 120 + i * 68));
     const metaY = 120 + lines.length * 68 + 4;
-    g.fillStyle = "#6e746f"; g.font = `500 32px ${FONT}`;
+    g.fillStyle = "#6f6f6f"; g.font = `500 32px ${FONT}`;
     g.fillText([p.activity_date ? fmtDate(p.activity_date) : "", p.area || ""].filter(Boolean).join("　・　"), 70, metaY);
     // 写真
     const top = metaY + 40, area = { x: 60, y: top, w: W - 120, h: H - top - 150 }, gap = 16;
@@ -135,11 +135,11 @@
     });
     // フッター（トマトのロゴ）
     const fy = H - 75;
-    g.fillStyle = "#e0412f"; g.beginPath(); g.arc(98, fy, 30, 0, Math.PI * 2); g.fill();
-    g.fillStyle = "#2e5e46"; g.beginPath(); g.moveTo(98, fy - 26); g.lineTo(84, fy - 44); g.lineTo(96, fy - 32); g.lineTo(98, fy - 48); g.lineTo(102, fy - 32); g.lineTo(114, fy - 44); g.closePath(); g.fill();
-    g.fillStyle = "#1f2420"; g.font = `700 50px ${FONT}`; g.textBaseline = "middle";
+    g.fillStyle = "#ff3b1f"; g.beginPath(); g.arc(98, fy, 30, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#00a35c"; g.beginPath(); g.moveTo(98, fy - 26); g.lineTo(84, fy - 44); g.lineTo(96, fy - 32); g.lineTo(98, fy - 48); g.lineTo(102, fy - 32); g.lineTo(114, fy - 44); g.closePath(); g.fill();
+    g.fillStyle = "#000000"; g.font = `900 50px "Archivo", ${FONT}`; g.textBaseline = "middle";
     g.fillText("domate", 142, fy + 2);
-    g.fillStyle = "#6e746f"; g.font = `500 30px ${FONT}`; g.textAlign = "right";
+    g.fillStyle = "#6f6f6f"; g.font = `500 30px ${FONT}`; g.textAlign = "right";
     g.fillText(`${memberCount}人でやってきた！`, W - 70, fy + 2);
     return new Promise((res) => c.toBlob(res, "image/jpeg", 0.9));
   }
@@ -727,7 +727,7 @@
   function renderAuth(tab = "login") {
     const signup = tab === "signup";
     const body = `<div class="auth">
-      <div class="hero"><h1><span class="brand"><span class="dot" style="width:22px;height:22px;box-shadow:6px -6px 0 -4px var(--leaf)"></span>domate</span></h1><p>やりたいことを、一緒にやる仲間と。</p></div>
+      <div class="hero"><h1><span class="brand"><span class="dot" style="width:22px;height:22px;box-shadow:7px -7px 0 -5px var(--leaf)"></span>domate</span></h1><p>やりたいことを、一緒にやる仲間と。</p></div>
       <div class="seg"><button class="${signup ? "" : "on"}" data-act="tab" data-t="login">ログイン</button><button class="${signup ? "on" : ""}" data-act="tab" data-t="signup">新規登録</button></div>
       <form data-form="${signup ? "signup" : "login"}">
         ${signup ? `<label class="f">表示名 <small>（ニックネームがおすすめ）</small></label><input class="input" name="name" maxlength="20" required>` : ""}
