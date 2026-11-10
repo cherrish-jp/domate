@@ -8,7 +8,7 @@
   const cache = new Map();     // 表示中の投稿
   const state = { feedKind: "", filters: { cats: [], lines: [], extra: [], date: null } };
   const AREAS = window.DOMATE_AREAS || [], CATS = window.DOMATE_CATEGORIES || [];
-  const GENDERS = window.DOMATE_GENDERS || [], AGES = window.DOMATE_AGES || [];
+  const GENDERS = window.DOMATE_GENDERS || [], AGES = window.DOMATE_AGES || [], TAGS = window.DOMATE_TAGS || [];
   const ALL_LINES = AREAS.flatMap((g) => g.lines);
   const lineById = (id) => ALL_LINES.find((l) => l.id === id);
   const catName = (id) => (CATS.find((c) => c.id === id) || {}).name || "";
@@ -27,10 +27,11 @@
 
   /* ---------------- 小さな道具 ---------------- */
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const COLORS = ["#ff3b1f", "#1f3bff", "#00a35c", "#ff9f0a", "#000000", "#ff4fa0", "#7a3cff"];
+  const COLORS = ["#ff3b1f", "#3a55c8", "#00a35c", "#ff9f0a", "#000000", "#ff4fa0", "#7a3cff"];
   function avatar(user, sm) {
     const name = (user && user.display_name) || "?";
     let h = 0; for (const ch of (user && user.id) || name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    if (user && user.avatar_url) return `<img class="avatar${sm ? " sm" : ""}" src="${esc(user.avatar_url)}" alt="">`;
     return `<div class="avatar${sm ? " sm" : ""}" style="background:${COLORS[h % COLORS.length]}">${esc([...name][0])}</div>`;
   }
   function ago(t) {
@@ -162,6 +163,18 @@
     return new Promise((res) => c.toBlob(res, "image/jpeg", 0.9));
   }
 
+  function squareImage(file, size) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        const s2 = Math.min(img.width, img.height), c = document.createElement("canvas"); c.width = c.height = size;
+        c.getContext("2d").drawImage(img, (img.width - s2) / 2, (img.height - s2) / 2, s2, s2, 0, 0, size, size);
+        URL.revokeObjectURL(img.src); c.toBlob((b) => (b ? res(b) : rej(new Error("画像を読み込めませんでした"))), "image/jpeg", 0.85);
+      };
+      img.onerror = () => rej(new Error("画像を読み込めませんでした"));
+      img.src = URL.createObjectURL(file);
+    });
+  }
   const inviteLink = (code) => location.origin + location.pathname + "#/join/" + code;
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); toast("コピーしました"); }
@@ -446,6 +459,7 @@
       </div>
       <div class="stats"><div><b>${pr.hosted_count || 0}</b><span>主催した回数</span></div><div><b>${pr.joined_count || 0}</b><span>参加した回数</span></div></div>
       ${rm && rm.bio ? `<p class="body" style="margin-top:14px">${esc(rm.bio)}</p>` : pr.bio ? `<p class="body" style="margin-top:14px">${esc(pr.bio)}</p>` : ""}
+      ${pr.tags && pr.tags.length ? `<div class="hobbies">${pr.tags.map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}
       <p class="hint" style="margin-top:12px">回数は、終わったイベントで参加が決まっていたものだけを数えています</p>
       ${mine ? "" : `<div class="row" style="margin-top:16px"><button class="btn sub sm" data-act="rep">${icon("flag")}通報</button><button class="btn sub sm" data-act="blk">${icon("ban")}ブロック</button></div>`}`, {
       rep: (_a, close) => { close(); openReport("user", uid); },
@@ -858,22 +872,11 @@
         <div class="prof">${avatar(me).replace('class="avatar"', 'class="avatar lg"')}<h2>${esc(me.display_name)}</h2>
           <div class="tags">${[ageName(me.age_range), me.gender !== "none" ? genderName(me.gender) : ""].filter(Boolean).map((t) => `<span>${esc(t)}</span>`).join("")}</div></div>
         <div class="stats"><div><b>${(pub && pub.hosted_count) || 0}</b><span>主催した回数</span></div><div><b>${(pub && pub.joined_count) || 0}</b><span>参加した回数</span></div></div>
-        <button class="btn sub sm block" data-act="preview" style="margin-top:14px">ほかの人からの見え方を確認</button>
+        ${me.bio ? `<p class="body" style="margin-top:14px">${esc(me.bio)}</p>` : ""}
+        ${me.tags && me.tags.length ? `<div class="hobbies">${me.tags.map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}
+        <div class="row" style="margin-top:14px"><a class="btn sm" href="#/me/edit" style="flex:1">${icon("pen")}プロフィールを編集</a><button class="btn sub sm" data-act="preview" style="flex:1">見え方を確認</button></div>
       </div>
       ${me.age_range ? "" : '<div class="card warn">年代を設定すると、仲間募集への投稿や参加申請ができるようになります</div>'}
-      <div class="sec-title">公開プロフィール <span class="meta">募集や申請のときに相手に見えます</span></div>
-      <form class="card" data-form="profile">
-        <label class="f" style="margin-top:0">表示名 <small>（本名は避けるのがおすすめ）</small></label>
-        <input class="input" name="name" maxlength="20" required value="${esc(me.display_name)}">
-        <div class="two">
-          <div><label class="f">年代</label><select class="input" name="age" required>${opt(AGES, me.age_range, "選んでください")}</select></div>
-          <div><label class="f">性別</label><select class="input" name="gender">${opt(GENDERS, me.gender || "none")}</select></div>
-        </div>
-        <label class="f">ひとこと</label>
-        <input class="input" name="bio" maxlength="160" value="${esc(me.bio || "")}" placeholder="好きなこと、最近ハマってること">
-        <p class="hint">主催・参加の回数は自動で表示されます。生年月日や学校名などは載りません</p>
-        <button class="btn block" type="submit" style="margin-top:14px">保存する</button>
-      </form>
       <div class="sec-title">ルームでの名前 <span class="meta">そのルームのメンバーにだけ見えます</span></div>
       <div class="card">${roomProfiles.map(({ room, m }) => `<div class="cmt" style="align-items:center"><div class="txt"><b>${esc(room.name)}</b><div class="meta">${m.nickname ? `「${esc(m.nickname)}」で表示中` : "公開プロフィールの名前で表示中"}</div></div><button class="btn sm sub" data-act="roomProf" data-id="${room.id}">編集</button></div>`).join("") || '<p class="meta">参加しているルームはまだありません</p>'}</div>
       <div class="sec-title">あなたの投稿 <span class="meta">${myPosts.length}</span></div>
@@ -892,7 +895,6 @@
       <p class="meta" style="text-align:center;margin:20px 0">domate by Cherrish</p>`;
     setView(layout({ title: "マイページ", body, active: "me" }), {
       like: likeHandler,
-      profile: async (f) => { await S.updateProfile({ display_name: f.name.value.trim(), bio: f.bio.value.trim(), age_range: f.age.value || null, gender: f.gender.value }); toast("保存しました"); renderMe(); },
       preview: () => openProfile(S.userId()),
       roomProf: (el) => {
         const rp = roomProfiles.find((x) => x.room.id === el.dataset.id);
@@ -909,6 +911,75 @@
     });
     const sw = document.getElementById("switchUser");
     if (sw) sw.addEventListener("change", async () => { await S.switchUser(sw.value); me = null; await refreshBlocks(); toast(`「${sw.selectedOptions[0].text}」になりました`); renderMe(); });
+  }
+
+  /* ---------------- プロフィール編集 ---------------- */
+  async function renderProfileEdit() {
+    me = await S.getMyProfile();
+    const tags = [...(me.tags || [])];
+    let avatarBlob = null, removeAvatar = false;
+    const opt = (list, cur, blank) => (blank ? `<option value="">${blank}</option>` : "") + list.map((x) => `<option value="${x.id}" ${cur === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("");
+    const drawTags = () => [...new Set([...TAGS, ...tags])].map((t) => `<button type="button" class="pick sm${tags.includes(t) ? " on" : ""}" data-act="tag" data-v="${esc(t)}">${esc(t)}</button>`).join("");
+    const drawAvatar = () => {
+      const u = { ...me, avatar_url: removeAvatar ? null : avatarBlob ? URL.createObjectURL(avatarBlob) : me.avatar_url };
+      return avatar(u).replace(/class="avatar"/, 'class="avatar xl"');
+    };
+    const body = `<form data-form="save" class="edit">
+      <div class="avatar-edit"><div id="avBox">${drawAvatar()}</div>
+        <div class="row"><label class="btn sm sub">${icon("camera")}写真を選ぶ<input type="file" accept="image/*" id="avInput" hidden></label>
+        <button type="button" class="btn sm ghost" data-act="rmAv">写真を外す</button></div>
+        <p class="hint">顔がはっきり写った写真でなくてもOKです。好きなものの写真でも大丈夫</p></div>
+
+      <label class="f">表示名 <small>（本名は避けるのがおすすめ）</small></label>
+      <input class="input" name="name" maxlength="20" required value="${esc(me.display_name)}">
+      <div class="two">
+        <div><label class="f">年代</label><select class="input" name="age" required>${opt(AGES, me.age_range, "選んでください")}</select></div>
+        <div><label class="f">性別</label><select class="input" name="gender">${opt(GENDERS, me.gender || "none")}</select></div>
+      </div>
+
+      <label class="f">自己紹介 <small id="bioCount">${(me.bio || "").length} / 300</small></label>
+      <textarea class="input" name="bio" maxlength="300" placeholder="最近ハマっていること、休日の過ごし方、一緒にやってみたいことなど">${esc(me.bio || "")}</textarea>
+
+      <label class="f">趣味タグ <small id="tagCount">${tags.length} / 10</small></label>
+      <div class="picks" id="tagBox">${drawTags()}</div>
+      <div class="send-bar"><input class="input" id="newTag" maxlength="15" placeholder="リストにないタグを追加"><button type="button" class="btn sub" data-act="addTag">追加</button></div>
+
+      <p class="hint" style="margin-top:16px">ここで設定した内容は、公開プロフィールとして募集や申請の相手に見えます。生年月日・学校名・住所などは載りません</p>
+      <button class="btn block accent" type="submit" style="margin:18px 0 8px">保存する</button>
+    </form>`;
+    const redrawTags = () => { document.getElementById("tagBox").innerHTML = drawTags(); document.getElementById("tagCount").textContent = `${tags.length} / 10`; };
+    setView(layout({ title: "プロフィールを編集", back: true, body, active: "me" }), {
+      back,
+      tag: (el) => {
+        const v = el.dataset.v;
+        if (tags.includes(v)) tags.splice(tags.indexOf(v), 1);
+        else { if (tags.length >= 10) throw new Error("趣味タグは10個まで選べます"); tags.push(v); }
+        redrawTags();
+      },
+      addTag: () => {
+        const inp = document.getElementById("newTag"), v = inp.value.trim().replace(/^#/, "");
+        if (!v) return;
+        if (!tags.includes(v)) { if (tags.length >= 10) throw new Error("趣味タグは10個まで選べます"); tags.push(v); }
+        inp.value = ""; redrawTags();
+      },
+      rmAv: () => { avatarBlob = null; removeAvatar = true; document.getElementById("avBox").innerHTML = drawAvatar(); },
+      save: async (f) => {
+        if (!f.age.value) throw new Error("年代を選んでください");
+        const patch = { display_name: f.name.value.trim(), bio: f.bio.value.trim(), age_range: f.age.value, gender: f.gender.value, tags };
+        if (avatarBlob) patch.avatar_url = await S.uploadAvatar(avatarBlob);
+        else if (removeAvatar) patch.avatar_url = null;
+        await S.updateProfile(patch);
+        toast("プロフィールを保存しました"); location.hash = "#/me";
+      },
+    });
+    document.getElementById("avInput").addEventListener("change", (e) => guard(async () => {
+      const file = e.target.files[0]; if (!file) return;
+      avatarBlob = await squareImage(file, S.mode === "demo" ? 240 : 480); removeAvatar = false;
+      document.getElementById("avBox").innerHTML = drawAvatar();
+    }));
+    const bio = document.querySelector("[name=bio]");
+    bio.addEventListener("input", () => { document.getElementById("bioCount").textContent = `${bio.value.length} / 300`; });
+    document.getElementById("newTag").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); document.querySelector("[data-act=addTag]").click(); } });
   }
 
   /* ---------------- ログイン・新規登録 ---------------- */
@@ -982,11 +1053,16 @@
       case "rooms": return renderRooms();
       case "join": return doJoin(parts[1]);
       case "activity": return renderActivity();
-      case "me": return renderMe();
+      case "me": return parts[1] === "edit" ? renderProfileEdit() : renderMe();
       default: location.hash = "#/";
     }
   }
 
   window.addEventListener("hashchange", () => guard(route));
-  guard(async () => { await S.init(); await route(); });
+  const started = Date.now();
+  function hideSplash() {
+    const sp = document.getElementById("splash"); if (!sp) return;
+    setTimeout(() => { sp.classList.add("hide"); setTimeout(() => sp.remove(), 400); }, Math.max(0, 700 - (Date.now() - started)));
+  }
+  guard(async () => { try { await S.init(); await route(); } finally { hideSplash(); } });
 })();

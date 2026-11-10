@@ -8,7 +8,7 @@
      デモモード
      ========================================================= */
   function LocalStore() {
-    const KEY = "domate-demo-v3";
+    const KEY = "domate-demo-v4";
     const iso = (t) => new Date(t).toISOString();
     const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     const H = 3600e3, D = 24 * H;
@@ -36,9 +36,9 @@
         me: "u_me",
         profiles: [
           { id: "u_me", display_name: "あなた", bio: "", gender: "none", age_range: "20s", created_at: iso(now - 30 * D) },
-          { id: "u_a", display_name: "はるか", bio: "週末は山とカフェ", gender: "female", age_range: "20s", created_at: iso(now - 60 * D) },
-          { id: "u_b", display_name: "そうた", bio: "ボドゲと料理が好き", gender: "male", age_range: "20s", created_at: iso(now - 45 * D) },
-          { id: "u_c", display_name: "みお", bio: "写真とおさんぽ", gender: "female", age_range: "30s", created_at: iso(now - 20 * D) },
+          { id: "u_a", display_name: "はるか", bio: "週末は山とカフェ。早起きして景色のいいところに行くのが好きです。", tags: ["登山", "カフェ巡り", "写真"], gender: "female", age_range: "20s", created_at: iso(now - 60 * D) },
+          { id: "u_b", display_name: "そうた", bio: "ボドゲと料理が好き。初心者にルールを教えるのが得意です。", tags: ["ボードゲーム", "料理", "謎解き・脱出"], gender: "male", age_range: "20s", created_at: iso(now - 45 * D) },
+          { id: "u_c", display_name: "みお", bio: "フィルムカメラで街を撮っています。古い喫茶店も好き。", tags: ["写真", "おさんぽ", "古着"], gender: "female", age_range: "30s", created_at: iso(now - 20 * D) },
         ],
         rooms: [
           { id: "r1", name: "ゼミの仲間", description: "ゼミメンバーだけの部屋", invite_code: "zemi2026", owner_id: "u_me", created_at: iso(now - 5 * D) },
@@ -103,7 +103,7 @@
     const joinedCount = (uid) => db.join_requests.filter((j) => j.user_id === uid && j.status === "approved" && (() => { const p = db.posts.find((x) => x.id === j.post_id); return p && endT(p) < Date.now(); })()).length;
     const prof = (id) => {
       const p = db.profiles.find((x) => x.id === id);
-      return p ? { id: p.id, display_name: p.display_name, gender: p.gender, age_range: p.age_range, hosted_count: hostedCount(id), joined_count: joinedCount(id) } : { id, display_name: "退会したユーザー" };
+      return p ? { id: p.id, display_name: p.display_name, avatar_url: p.avatar_url || null, gender: p.gender, age_range: p.age_range, hosted_count: hostedCount(id), joined_count: joinedCount(id) } : { id, display_name: "退会したユーザー" };
     };
     const isMember = (roomId) => db.room_members.some((m) => m.room_id === roomId && m.user_id === me());
     const canSee = (p) => p && (p.visibility === "public" || p.author_id === me() || (p.room_id && isMember(p.room_id)));
@@ -136,7 +136,8 @@
       async resetDemo() { db = seed(); save(); },
       async signUp() {}, async signIn() {}, async signOut() {},
 
-      async getMyProfile() { return { ...db.profiles.find((p) => p.id === me()) }; },
+      async getMyProfile() { const p = db.profiles.find((x) => x.id === me()); return { tags: [], ...p }; },
+      async uploadAvatar(blob) { return blobToDataUrl(blob); },
       async updateProfile(patch) { Object.assign(db.profiles.find((p) => p.id === me()), patch); save(); },
 
       async listPosts({ roomId, kind, categories, stations, from, to } = {}) {
@@ -150,7 +151,7 @@
       },
       async getPublicProfile(uid) {
         const p = db.profiles.find((x) => x.id === uid); if (!p) return null;
-        return { ...prof(uid), bio: p.bio, created_at: p.created_at };
+        return { ...prof(uid), bio: p.bio, tags: p.tags || [], created_at: p.created_at };
       },
       async getRoomMembers(roomId) {
         need(isMember(roomId), "このルームのメンバーではありません");
@@ -269,7 +270,7 @@
     const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
     let user = null;
     const POST =
-      "*, author:profiles!posts_author_id_fkey(id,display_name,gender,age_range,hosted_count,joined_count), room:rooms!posts_room_id_fkey(id,name), like_count, liked_by_me, comment_count, approved_count, my_request_status";
+      "*, author:profiles!posts_author_id_fkey(id,display_name,avatar_url,gender,age_range,hosted_count,joined_count), room:rooms!posts_room_id_fkey(id,name), like_count, liked_by_me, comment_count, approved_count, my_request_status";
     const ok = ({ data, error }) => { if (error) throw new Error(friendly(error)); return data; };
     function friendly(e) {
       const m = (e && e.message) || String(e);
@@ -311,6 +312,11 @@
 
       async getMyProfile() { return ok(await sb.from("profiles").select("*").eq("id", me()).single()); },
       async updateProfile(patch) { ok(await sb.from("profiles").update(patch).eq("id", me())); },
+      async uploadAvatar(blob) {
+        const path = `${me()}/avatar-${Date.now()}.jpg`;
+        ok(await sb.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg" }));
+        return sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+      },
 
       async listPosts({ roomId, kind, categories, stations, from, to } = {}) {
         let q = sb.from("posts").select(POST).order("created_at", { ascending: false }).limit(100);
@@ -322,7 +328,7 @@
         return ok(await q);
       },
       async getPublicProfile(uid) {
-        return ok(await sb.from("profiles").select("id,display_name,bio,gender,age_range,created_at,hosted_count,joined_count").eq("id", uid).maybeSingle());
+        return ok(await sb.from("profiles").select("id,display_name,avatar_url,bio,tags,gender,age_range,created_at,hosted_count,joined_count").eq("id", uid).maybeSingle());
       },
       async getRoomMembers(roomId) { return ok(await sb.from("room_members").select("user_id,role,nickname,bio").eq("room_id", roomId)); },
       async updateRoomProfile(roomId, patch) { ok(await sb.from("room_members").update(patch).eq("room_id", roomId).eq("user_id", me())); },
@@ -344,22 +350,22 @@
         if (post.liked_by_me) ok(await sb.from("likes").delete().eq("post_id", post.id).eq("user_id", me()));
         else ok(await sb.from("likes").insert({ post_id: post.id, user_id: me() }));
       },
-      async listComments(postId) { return ok(await sb.from("comments").select("*, author:profiles(id,display_name)").eq("post_id", postId).order("created_at")); },
+      async listComments(postId) { return ok(await sb.from("comments").select("*, author:profiles(id,display_name,avatar_url)").eq("post_id", postId).order("created_at")); },
       async addComment(postId, body) { ok(await sb.from("comments").insert({ post_id: postId, author_id: me(), body })); },
       async deleteComment(id) { ok(await sb.from("comments").delete().eq("id", id)); },
 
       async requestJoin(postId, message) { ok(await sb.from("join_requests").insert({ post_id: postId, user_id: me(), message })); },
       async cancelJoin(postId) { ok(await sb.from("join_requests").delete().eq("post_id", postId).eq("user_id", me())); },
-      async listRequests(postId) { return ok(await sb.from("join_requests").select("*, user:profiles(id,display_name,gender,age_range,hosted_count,joined_count)").eq("post_id", postId).order("created_at")); },
+      async listRequests(postId) { return ok(await sb.from("join_requests").select("*, user:profiles(id,display_name,avatar_url,gender,age_range,hosted_count,joined_count)").eq("post_id", postId).order("created_at")); },
       async setRequestStatus(id, status) { ok(await sb.from("join_requests").update({ status }).eq("id", id)); },
       async listMyRequests() { return ok(await sb.from("join_requests").select("*, post:posts!join_requests_post_id_fkey(id,title,activity_date,end_at,area)").eq("user_id", me()).order("created_at", { ascending: false })); },
 
-      async listMessages(postId) { return ok(await sb.from("messages").select("*, author:profiles(id,display_name)").eq("post_id", postId).order("created_at").limit(300)); },
+      async listMessages(postId) { return ok(await sb.from("messages").select("*, author:profiles(id,display_name,avatar_url)").eq("post_id", postId).order("created_at").limit(300)); },
       async sendMessage(postId, body) { ok(await sb.from("messages").insert({ post_id: postId, author_id: me(), body })); },
 
       async listChatMembers(postId) { return ok(await sb.rpc("chat_members", { p: postId })); },
       async listEventPhotos(postId) {
-        const rows = ok(await sb.from("event_photos").select("*, uploader:profiles(id,display_name)").eq("post_id", postId).order("created_at"));
+        const rows = ok(await sb.from("event_photos").select("*, uploader:profiles(id,display_name,avatar_url)").eq("post_id", postId).order("created_at"));
         const withUrls = await Promise.all(rows.map(async (r) => {
           const { data, error } = await sb.storage.from("event-photos").download(r.path);
           return error ? null : { ...r, url: URL.createObjectURL(data) };
@@ -391,7 +397,7 @@
       async leaveRoom(id) { ok(await sb.from("room_members").delete().eq("room_id", id).eq("user_id", me())); },
 
       async report(target_type, target_id, reason) { ok(await sb.from("reports").insert({ reporter_id: me(), target_type, target_id, reason })); },
-      async listBlocks() { return ok(await sb.from("blocks").select("blocked_id, blocked:profiles!blocks_blocked_id_fkey(id,display_name)").eq("blocker_id", me())); },
+      async listBlocks() { return ok(await sb.from("blocks").select("blocked_id, blocked:profiles!blocks_blocked_id_fkey(id,display_name,avatar_url)").eq("blocker_id", me())); },
       async block(userId) { ok(await sb.from("blocks").upsert({ blocker_id: me(), blocked_id: userId })); },
       async unblock(userId) { ok(await sb.from("blocks").delete().eq("blocker_id", me()).eq("blocked_id", userId)); },
     };

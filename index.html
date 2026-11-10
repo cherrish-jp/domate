@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#ff3b1f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="domate">
@@ -19,7 +19,7 @@
   :root {
     --bg: #ffffff; --surface: #ffffff; --ink: #000000; --soft: #6f6f6f; --line: #e8e8e8; --wash: #f5f5f5;
     --tomato: #ff3b1f; --tomato-dark: #e02a0f; --tomato-light: #fff0ec;
-    --blue: #1f3bff; --leaf: #00a35c; --leaf-light: #e5f7ee;
+    --blue: #3a55c8; --blue-dark: #2f47ab; --leaf: #00a35c; --leaf-light: #e5f7ee;
     --pink: #ffb3a6; --pink-light: #fff0ec;
     --shadow: none;
     --wide: "Archivo", "Murecho", sans-serif;
@@ -227,7 +227,7 @@
   .day.has { background: var(--blue); color: #fff; }
   .day i { font-style: normal; font-size: .62rem; font-weight: 800; line-height: 1; opacity: .9; }
   .day:not(:disabled):hover { background: var(--wash); }
-  .day.has:hover { background: #1630d6; }
+  .day.has:hover { background: var(--blue-dark); }
   .prof { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
   .prof h2 { font-size: 1.25rem; font-weight: 800; }
   .tags, .trust { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
@@ -239,11 +239,29 @@
   .stats div { border: 1.5px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; display: flex; flex-direction: column; }
   .stats b { font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: 1.8rem; line-height: 1.1; }
   .stats span { font-size: .74rem; color: var(--soft); font-weight: 700; }
+  img.avatar { object-fit: cover; padding: 0; background: var(--wash); }
+  .avatar.xl { width: 104px; height: 104px; font-size: 2.2rem; }
+  .avatar-edit { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; margin-top: 6px; }
+  .avatar-edit label.btn { cursor: pointer; }
+  .hobbies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .hobbies span { font-size: .78rem; font-weight: 700; border: 1.5px solid var(--ink); border-radius: 999px; padding: 2px 11px; }
+  .hobbies span::before { content: "#"; color: var(--tomato); margin-right: 1px; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .area-sel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .area-sel select:disabled { opacity: .5; }
   .warn { background: #fff4cc; border-color: #ffe08a; font-size: .86rem; font-weight: 700; }
   .loading { text-align: center; padding: 48px; color: var(--soft); }
+
+  /* 起動画面 */
+  #splash { position: fixed; inset: 0; z-index: 100; background: var(--tomato); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; transition: opacity .35s ease, visibility .35s; }
+  #splash.hide { opacity: 0; visibility: hidden; }
+  #splash .mark { width: 76px; height: 76px; border-radius: 50%; background: #fff; position: relative; animation: pop .5s cubic-bezier(.3, 1.6, .5, 1) both; }
+  #splash .mark::after { content: ""; position: absolute; left: 50%; top: -10px; width: 26px; height: 22px; transform: translateX(-50%); background: var(--leaf);
+    clip-path: polygon(50% 100%, 0% 15%, 40% 55%, 50% 0%, 60% 55%, 100% 15%); }
+  #splash .name { font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: 2.1rem; letter-spacing: -0.02em; }
+  #splash .by { position: absolute; bottom: calc(28px + env(safe-area-inset-bottom)); font-size: .75rem; opacity: .75; letter-spacing: .04em; }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { #splash .mark { animation: none; } #splash { transition: none; } }
 
   /* ログイン */
   .auth { padding: 48px 22px; max-width: 460px; margin: 0 auto; }
@@ -257,7 +275,8 @@
 </style>
 </head>
 <body>
-  <div id="app"><div class="loading">読み込み中…</div></div>
+  <div id="splash" role="status" aria-label="読み込み中"><div class="mark"></div><div class="name">domate</div><div class="by">by Cherrish</div></div>
+  <div id="app"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
