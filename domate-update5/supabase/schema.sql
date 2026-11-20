@@ -1,0 +1,607 @@
+-- =============================================================
+-- DoMate データベース設定
+-- Supabase の管理画面 → SQL Editor に全部貼り付けて「Run」するだけでOK
+-- =============================================================
+
+create extension if not exists pgcrypto;
+
+-- ---------- テーブル ----------
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null default 'ななし' check (char_length(display_name) between 1 and 20),
+  bio text not null default '' check (char_length(bio) <= 160),
+  age_confirmed boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.rooms (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) between 1 and 40),
+  description text not null default '' check (char_length(description) <= 200),
+  invite_code text not null unique default substr(replace(gen_random_uuid()::text, '-', ''), 1, 10),
+  owner_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.room_members (
+  room_id uuid not null references public.rooms(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null default 'member' check (role in ('owner', 'member')),
+  joined_at timestamptz not null default now(),
+  primary key (room_id, user_id)
+);
+
+create table if not exists public.posts (
+  id uuid primary key default gen_random_uuid(),
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  kind text not null check (kind in ('experience', 'recruit')),
+  title text not null check (char_length(title) between 1 and 60),
+  body text not null default '' check (char_length(body) <= 2000),
+  image_url text,
+  visibility text not null default 'public' check (visibility in ('public', 'room')),
+  room_id uuid references public.rooms(id) on delete cascade,
+  activity_date timestamptz,
+  area text check (area is null or char_length(area) <= 40),
+  capacity int check (capacity is null or capacity between 1 and 100),
+  conditions text check (conditions is null or char_length(conditions) <= 300),
+  status text not null default 'open' check (status in ('open', 'closed')),
+  created_at timestamptz not null default now(),
+  constraint room_visibility check ((visibility = 'room') = (room_id is not null))
+);
+create index if not exists posts_created_idx on public.posts (created_at desc);
+create index if not exists posts_room_idx on public.posts (room_id);
+
+create table if not exists public.likes (
+  post_id uuid not null references public.posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+
+create table if not exists public.comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.join_requests (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  message text not null default '' check (char_length(message) <= 300),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  created_at timestamptz not null default now(),
+  unique (post_id, user_id)
+);
+
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  target_type text not null check (target_type in ('post', 'comment', 'user', 'message')),
+  target_id uuid not null,
+  reason text not null check (char_length(reason) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.blocks (
+  blocker_id uuid not null references public.profiles(id) on delete cascade,
+  blocked_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (blocker_id, blocked_id)
+);
+
+-- ---------- 新規登録したらプロフィールを自動作成 ----------
+
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id, display_name, age_confirmed)
+  values (
+    new.id,
+    left(coalesce(nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''), 'ななし'), 20),
+    coalesce((new.raw_user_meta_data ->> 'age_confirmed')::boolean, false)
+  );
+  return new;
+end $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ---------- 権限チェック用の関数 ----------
+
+create or replace function public.is_room_member(r uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from room_members where room_id = r and user_id = auth.uid());
+$$;
+
+create or replace function public.can_see_post(p uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from posts
+    where id = p
+      and (visibility = 'public' or author_id = auth.uid() or (room_id is not null and is_room_member(room_id)))
+  );
+$$;
+
+create or replace function public.is_post_author(p uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from posts where id = p and author_id = auth.uid());
+$$;
+
+create or replace function public.is_chat_member(p uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select is_post_author(p)
+      or exists (select 1 from join_requests where post_id = p and user_id = auth.uid() and status = 'approved');
+$$;
+
+create or replace function public.can_request_join(p uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select can_see_post(p) and exists (
+    select 1 from posts where id = p and kind = 'recruit' and status = 'open' and author_id <> auth.uid()
+  );
+$$;
+
+-- ---------- 投稿一覧で使う集計（計算列） ----------
+
+create or replace function public.like_count(public.posts)
+returns int language sql stable security definer set search_path = public as $$
+  select count(*)::int from likes where post_id = $1.id;
+$$;
+
+create or replace function public.liked_by_me(public.posts)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from likes where post_id = $1.id and user_id = auth.uid());
+$$;
+
+create or replace function public.comment_count(public.posts)
+returns int language sql stable security definer set search_path = public as $$
+  select count(*)::int from comments where post_id = $1.id;
+$$;
+
+create or replace function public.approved_count(public.posts)
+returns int language sql stable security definer set search_path = public as $$
+  select count(*)::int from join_requests where post_id = $1.id and status = 'approved';
+$$;
+
+create or replace function public.my_request_status(public.posts)
+returns text language sql stable security definer set search_path = public as $$
+  select status from join_requests where post_id = $1.id and user_id = auth.uid();
+$$;
+
+-- ---------- ルームの作成・参加 ----------
+
+create or replace function public.create_room(p_name text, p_description text)
+returns public.rooms language plpgsql security definer set search_path = public as $$
+declare r rooms;
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  insert into rooms (name, description, owner_id)
+  values (p_name, coalesce(p_description, ''), auth.uid())
+  returning * into r;
+  insert into room_members (room_id, user_id, role) values (r.id, auth.uid(), 'owner');
+  return r;
+end $$;
+
+create or replace function public.join_room(p_code text)
+returns public.rooms language plpgsql security definer set search_path = public as $$
+declare r rooms;
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  select * into r from rooms where invite_code = p_code;
+  if not found then raise exception 'room not found'; end if;
+  insert into room_members (room_id, user_id) values (r.id, auth.uid()) on conflict do nothing;
+  return r;
+end $$;
+
+-- ---------- 行レベルセキュリティ（RLS） ----------
+
+alter table public.profiles      enable row level security;
+alter table public.rooms         enable row level security;
+alter table public.room_members  enable row level security;
+alter table public.posts         enable row level security;
+alter table public.likes         enable row level security;
+alter table public.comments      enable row level security;
+alter table public.join_requests enable row level security;
+alter table public.messages      enable row level security;
+alter table public.reports       enable row level security;
+alter table public.blocks        enable row level security;
+
+-- profiles
+drop policy if exists "profiles: read" on public.profiles;
+create policy "profiles: read" on public.profiles for select to authenticated using (true);
+drop policy if exists "profiles: update own" on public.profiles;
+create policy "profiles: update own" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+
+-- rooms（作成・参加は上の関数経由）
+drop policy if exists "rooms: members read" on public.rooms;
+create policy "rooms: members read" on public.rooms for select to authenticated using (is_room_member(id));
+drop policy if exists "rooms: owner update" on public.rooms;
+create policy "rooms: owner update" on public.rooms for update to authenticated using (owner_id = auth.uid());
+drop policy if exists "rooms: owner delete" on public.rooms;
+create policy "rooms: owner delete" on public.rooms for delete to authenticated using (owner_id = auth.uid());
+
+-- room_members
+drop policy if exists "members: read" on public.room_members;
+create policy "members: read" on public.room_members for select to authenticated using (is_room_member(room_id));
+drop policy if exists "members: leave" on public.room_members;
+create policy "members: leave" on public.room_members for delete to authenticated using (user_id = auth.uid());
+
+-- posts
+drop policy if exists "posts: read" on public.posts;
+create policy "posts: read" on public.posts for select to authenticated
+  using (visibility = 'public' or author_id = auth.uid() or (room_id is not null and is_room_member(room_id)));
+drop policy if exists "posts: insert" on public.posts;
+create policy "posts: insert" on public.posts for insert to authenticated
+  with check (author_id = auth.uid() and (visibility = 'public' or is_room_member(room_id)));
+drop policy if exists "posts: update own" on public.posts;
+create policy "posts: update own" on public.posts for update to authenticated
+  using (author_id = auth.uid()) with check (author_id = auth.uid() and (visibility = 'public' or is_room_member(room_id)));
+drop policy if exists "posts: delete own" on public.posts;
+create policy "posts: delete own" on public.posts for delete to authenticated using (author_id = auth.uid());
+
+-- likes
+drop policy if exists "likes: read" on public.likes;
+create policy "likes: read" on public.likes for select to authenticated using (can_see_post(post_id));
+drop policy if exists "likes: insert" on public.likes;
+create policy "likes: insert" on public.likes for insert to authenticated with check (user_id = auth.uid() and can_see_post(post_id));
+drop policy if exists "likes: delete own" on public.likes;
+create policy "likes: delete own" on public.likes for delete to authenticated using (user_id = auth.uid());
+
+-- comments
+drop policy if exists "comments: read" on public.comments;
+create policy "comments: read" on public.comments for select to authenticated using (can_see_post(post_id));
+drop policy if exists "comments: insert" on public.comments;
+create policy "comments: insert" on public.comments for insert to authenticated with check (author_id = auth.uid() and can_see_post(post_id));
+drop policy if exists "comments: delete own" on public.comments;
+create policy "comments: delete own" on public.comments for delete to authenticated using (author_id = auth.uid());
+
+-- join_requests
+drop policy if exists "requests: read" on public.join_requests;
+create policy "requests: read" on public.join_requests for select to authenticated
+  using (user_id = auth.uid() or is_post_author(post_id));
+drop policy if exists "requests: insert" on public.join_requests;
+create policy "requests: insert" on public.join_requests for insert to authenticated
+  with check (user_id = auth.uid() and status = 'pending' and can_request_join(post_id));
+drop policy if exists "requests: author decides" on public.join_requests;
+create policy "requests: author decides" on public.join_requests for update to authenticated
+  using (is_post_author(post_id)) with check (is_post_author(post_id));
+drop policy if exists "requests: cancel own" on public.join_requests;
+create policy "requests: cancel own" on public.join_requests for delete to authenticated using (user_id = auth.uid());
+
+-- messages（募集者と承認された参加者だけ）
+drop policy if exists "messages: read" on public.messages;
+create policy "messages: read" on public.messages for select to authenticated using (is_chat_member(post_id));
+drop policy if exists "messages: insert" on public.messages;
+create policy "messages: insert" on public.messages for insert to authenticated with check (author_id = auth.uid() and is_chat_member(post_id));
+
+-- reports（送るだけ。中身は管理画面の Table Editor で確認）
+drop policy if exists "reports: insert" on public.reports;
+create policy "reports: insert" on public.reports for insert to authenticated with check (reporter_id = auth.uid());
+
+-- blocks
+drop policy if exists "blocks: own" on public.blocks;
+create policy "blocks: own" on public.blocks for all to authenticated
+  using (blocker_id = auth.uid()) with check (blocker_id = auth.uid() and blocked_id <> auth.uid());
+
+-- ---------- 写真の保存場所 ----------
+
+insert into storage.buckets (id, name, public)
+values ('post-images', 'post-images', true)
+on conflict (id) do nothing;
+
+drop policy if exists "post-images: upload own" on storage.objects;
+create policy "post-images: upload own" on storage.objects for insert to authenticated
+  with check (bucket_id = 'post-images' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "post-images: delete own" on storage.objects;
+create policy "post-images: delete own" on storage.objects for delete to authenticated
+  using (bucket_id = 'post-images' and owner = auth.uid());
+
+-- =============================================================
+-- 追加：イベント後のおもいで（写真アルバム・コラージュ）と「私もやりたい」
+-- （何度実行しても大丈夫です）
+-- =============================================================
+
+alter table public.posts add column if not exists end_at timestamptz;
+alter table public.posts add column if not exists source_post_id uuid references public.posts(id) on delete set null;
+
+create table if not exists public.event_photos (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  uploader_id uuid not null references public.profiles(id) on delete cascade,
+  path text not null,
+  created_at timestamptz not null default now()
+);
+
+-- 外部SNSなどへのシェアに「OK」した人（全員そろうとシェアできる）
+create table if not exists public.share_consents (
+  post_id uuid not null references public.posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+
+-- 募集した人＋参加が決まった人の一覧（メンバーだけが見られる）
+create or replace function public.chat_members(p uuid)
+returns table (id uuid, display_name text) language sql stable security definer set search_path = public as $$
+  select pr.id, pr.display_name from profiles pr
+  where is_chat_member(p)
+    and (pr.id = (select author_id from posts where posts.id = p)
+         or exists (select 1 from join_requests j where j.post_id = p and j.user_id = pr.id and j.status = 'approved'));
+$$;
+
+create or replace function public.is_chat_member_folder(t text)
+returns boolean language plpgsql stable security definer set search_path = public as $$
+begin
+  if t is null or t !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then return false; end if;
+  return is_chat_member(t::uuid);
+end $$;
+
+alter table public.event_photos   enable row level security;
+alter table public.share_consents enable row level security;
+
+drop policy if exists "event_photos: read" on public.event_photos;
+create policy "event_photos: read" on public.event_photos for select to authenticated using (is_chat_member(post_id));
+drop policy if exists "event_photos: insert" on public.event_photos;
+create policy "event_photos: insert" on public.event_photos for insert to authenticated with check (uploader_id = auth.uid() and is_chat_member(post_id));
+drop policy if exists "event_photos: delete own" on public.event_photos;
+create policy "event_photos: delete own" on public.event_photos for delete to authenticated using (uploader_id = auth.uid());
+
+drop policy if exists "consents: read" on public.share_consents;
+create policy "consents: read" on public.share_consents for select to authenticated using (is_chat_member(post_id));
+drop policy if exists "consents: insert own" on public.share_consents;
+create policy "consents: insert own" on public.share_consents for insert to authenticated with check (user_id = auth.uid() and is_chat_member(post_id));
+drop policy if exists "consents: delete own" on public.share_consents;
+create policy "consents: delete own" on public.share_consents for delete to authenticated using (user_id = auth.uid());
+
+-- イベント写真は非公開の保存場所（参加メンバーだけが見られる）
+insert into storage.buckets (id, name, public)
+values ('event-photos', 'event-photos', false)
+on conflict (id) do nothing;
+
+drop policy if exists "event-photos: read members" on storage.objects;
+create policy "event-photos: read members" on storage.objects for select to authenticated
+  using (bucket_id = 'event-photos' and is_chat_member_folder((storage.foldername(name))[1]));
+drop policy if exists "event-photos: upload members" on storage.objects;
+create policy "event-photos: upload members" on storage.objects for insert to authenticated
+  with check (bucket_id = 'event-photos' and is_chat_member_folder((storage.foldername(name))[1]));
+drop policy if exists "event-photos: delete own" on storage.objects;
+create policy "event-photos: delete own" on storage.objects for delete to authenticated
+  using (bucket_id = 'event-photos' and owner = auth.uid());
+-- =============================================================
+-- 追加②：エリア・カテゴリ検索と、公開プロフィール／ルーム用プロフィール
+-- SQL Editor に貼り付けて Run（何度実行しても大丈夫です）
+-- =============================================================
+
+-- 公開プロフィール：性別・年代
+alter table public.profiles add column if not exists gender text not null default 'none';
+alter table public.profiles add column if not exists age_range text;
+alter table public.profiles drop constraint if exists profiles_gender_check;
+alter table public.profiles add constraint profiles_gender_check check (gender in ('female', 'male', 'other', 'none'));
+alter table public.profiles drop constraint if exists profiles_age_range_check;
+alter table public.profiles add constraint profiles_age_range_check check (age_range is null or age_range in ('18-19', '20s', '30s', '40s', '50plus'));
+
+-- ルーム用プロフィール：ルームごとのニックネームとひとこと
+alter table public.room_members add column if not exists nickname text check (nickname is null or char_length(nickname) <= 20);
+alter table public.room_members add column if not exists bio text check (bio is null or char_length(bio) <= 160);
+drop policy if exists "members: update own" on public.room_members;
+create policy "members: update own" on public.room_members for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- 投稿：カテゴリ・路線・駅
+alter table public.posts add column if not exists category text;
+alter table public.posts add column if not exists line text;
+alter table public.posts add column if not exists station text;
+create index if not exists posts_station_idx on public.posts (station);
+create index if not exists posts_category_idx on public.posts (category);
+create index if not exists posts_activity_idx on public.posts (activity_date);
+
+-- 新規登録時に性別・年代も保存する
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare g text := coalesce(new.raw_user_meta_data ->> 'gender', 'none');
+        a text := nullif(new.raw_user_meta_data ->> 'age_range', '');
+begin
+  if g not in ('female', 'male', 'other', 'none') then g := 'none'; end if;
+  if a is not null and a not in ('18-19', '20s', '30s', '40s', '50plus') then a := null; end if;
+  insert into public.profiles (id, display_name, age_confirmed, gender, age_range)
+  values (
+    new.id,
+    left(coalesce(nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''), 'ななし'), 20),
+    coalesce((new.raw_user_meta_data ->> 'age_confirmed')::boolean, false),
+    g, a
+  );
+  return new;
+end $$;
+
+-- 実績（終了したイベントで、参加者が決まっていた回数）
+create or replace function public.hosted_count(public.profiles)
+returns int language sql stable security definer set search_path = public as $$
+  select count(*)::int from posts p
+  where p.author_id = $1.id and p.kind = 'recruit'
+    and coalesce(p.end_at, p.activity_date + interval '3 hours') < now()
+    and exists (select 1 from join_requests j where j.post_id = p.id and j.status = 'approved');
+$$;
+
+create or replace function public.joined_count(public.profiles)
+returns int language sql stable security definer set search_path = public as $$
+  select count(*)::int from join_requests j join posts p on p.id = j.post_id
+  where j.user_id = $1.id and j.status = 'approved'
+    and coalesce(p.end_at, p.activity_date + interval '3 hours') < now();
+$$;
+-- =============================================================
+-- 追加③：プロフィール編集（アイコン写真・自己紹介・趣味タグ）
+-- SQL Editor に貼り付けて Run（何度実行しても大丈夫です）
+-- =============================================================
+
+alter table public.profiles add column if not exists avatar_url text;
+alter table public.profiles add column if not exists tags text[] not null default '{}';
+alter table public.profiles drop constraint if exists profiles_tags_check;
+alter table public.profiles add constraint profiles_tags_check check (cardinality(tags) <= 10);
+-- 自己紹介を300字まで書けるようにする
+alter table public.profiles drop constraint if exists profiles_bio_check;
+alter table public.profiles add constraint profiles_bio_check check (char_length(bio) <= 300);
+
+-- アイコン写真の保存場所（自分のフォルダにだけ保存・削除できる）
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+drop policy if exists "avatars: upload own" on storage.objects;
+create policy "avatars: upload own" on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "avatars: delete own" on storage.objects;
+create policy "avatars: delete own" on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and owner = auth.uid());
+-- =============================================================
+-- 追加④：運営用の集計画面（admin.html）
+-- SQL Editor に貼り付けて Run（何度実行しても大丈夫です）
+-- 実行後、いちばん下の「管理者の登録」も忘れずに。
+-- =============================================================
+
+-- 管理者の一覧（アプリからは読めない。SQL Editor でだけ追加できる）
+create table if not exists public.admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.admins enable row level security;
+
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from admins where user_id = auth.uid());
+$$;
+
+-- 通報の対応状況
+alter table public.reports add column if not exists status text not null default 'open';
+alter table public.reports drop constraint if exists reports_status_check;
+alter table public.reports add constraint reports_status_check check (status in ('open', 'done'));
+
+-- 集計（個人が特定できる情報やチャットの中身は返さない）
+create or replace function public.admin_stats()
+returns json language plpgsql stable security definer set search_path = public as $$
+declare r json;
+begin
+  if not is_admin() then raise exception 'not admin'; end if;
+  select json_build_object(
+    'users_total', (select count(*) from profiles),
+    'users_7d', (select count(*) from profiles where created_at > now() - interval '7 days'),
+    'active_7d', (select count(distinct uid) from (
+        select author_id as uid from posts where created_at > now() - interval '7 days'
+        union select author_id from comments where created_at > now() - interval '7 days'
+        union select user_id from join_requests where created_at > now() - interval '7 days'
+        union select author_id from messages where created_at > now() - interval '7 days') t),
+    'posts_experience', (select count(*) from posts where kind = 'experience'),
+    'posts_recruit', (select count(*) from posts where kind = 'recruit'),
+    'posts_room', (select count(*) from posts where visibility = 'room'),
+    'requests_total', (select count(*) from join_requests),
+    'requests_approved', (select count(*) from join_requests where status = 'approved'),
+    'recruits_realized', (select count(*) from posts p where p.kind = 'recruit'
+        and coalesce(p.end_at, p.activity_date + interval '3 hours') < now()
+        and exists (select 1 from join_requests j where j.post_id = p.id and j.status = 'approved')),
+    'collage_posts', (select count(*) from posts where source_post_id is not null and kind = 'experience'),
+    'rooms_total', (select count(*) from rooms),
+    'rooms_active_30d', (select count(distinct room_id) from posts where room_id is not null and created_at > now() - interval '30 days'),
+    'reports_open', (select count(*) from reports where status = 'open'),
+    'categories', (select coalesce(json_agg(x), '[]') from (select category as key, count(*) as n from posts where category is not null group by category order by n desc) x),
+    'stations', (select coalesce(json_agg(x), '[]') from (select station as key, count(*) as n from posts where kind = 'recruit' and station is not null group by station order by n desc limit 10) x),
+    'ages', (select coalesce(json_agg(x), '[]') from (select coalesce(age_range, 'unset') as key, count(*) as n from profiles group by 1 order by 1) x),
+    'genders', (select coalesce(json_agg(x), '[]') from (select gender as key, count(*) as n from profiles group by 1 order by 2 desc) x),
+    'weekly', (select coalesce(json_agg(w order by w.week), '[]') from (
+        select to_char(gs, 'MM/DD') as label, gs as week,
+          (select count(*) from profiles where created_at >= gs and created_at < gs + interval '7 days') as users,
+          (select count(*) from posts where created_at >= gs and created_at < gs + interval '7 days') as posts,
+          (select count(*) from join_requests where status = 'approved' and created_at >= gs and created_at < gs + interval '7 days') as matches
+        from generate_series(date_trunc('week', now()) - interval '7 weeks', date_trunc('week', now()), interval '1 week') gs) w)
+  ) into r;
+  return r;
+end $$;
+
+-- 通報の一覧（利用規約で定めた「通報時の確認」のため、通報された内容だけを返す）
+create or replace function public.admin_reports()
+returns json language plpgsql stable security definer set search_path = public as $$
+declare r json;
+begin
+  if not is_admin() then raise exception 'not admin'; end if;
+  select coalesce(json_agg(x order by x.created_at desc), '[]') into r from (
+    select rp.id, rp.created_at, rp.target_type, rp.target_id, rp.reason, rp.status,
+      case rp.target_type
+        when 'post' then (select title || coalesce(' / ' || left(body, 200), '') from posts where id = rp.target_id)
+        when 'comment' then (select left(body, 200) from comments where id = rp.target_id)
+        when 'message' then (select left(body, 200) from messages where id = rp.target_id)
+        when 'user' then (select display_name || coalesce(' / ' || left(bio, 120), '') from profiles where id = rp.target_id)
+      end as preview
+    from reports rp order by rp.created_at desc limit 100) x;
+  return r;
+end $$;
+
+create or replace function public.admin_set_report_status(p_id uuid, p_status text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not admin'; end if;
+  update reports set status = p_status where id = p_id;
+end $$;
+
+-- 規約違反の投稿・コメントを削除する
+create or replace function public.admin_remove(p_type text, p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not admin'; end if;
+  if p_type = 'post' then delete from posts where id = p_id;
+  elsif p_type = 'comment' then delete from comments where id = p_id;
+  elsif p_type = 'message' then delete from messages where id = p_id;
+  end if;
+end $$;
+
+-- -------------------------------------------------------------
+-- 管理者の登録：下の 'あなたのメールアドレス' を、domate に登録した
+-- 自分のメールアドレスに書き換えてから、この1行だけ選んで Run
+-- -------------------------------------------------------------
+-- insert into public.admins (user_id) select id from auth.users where email = 'あなたのメールアドレス' on conflict do nothing;
+-- =============================================================
+-- 追加⑤：クラフトブック（ステッカーで作るおもいでページ）と、地名（市区町村）での検索
+-- SQL Editor に貼り付けて Run（何度実行しても大丈夫です）
+-- =============================================================
+
+-- 投稿：市区町村
+alter table public.posts add column if not exists city text check (city is null or char_length(city) <= 20);
+create index if not exists posts_city_idx on public.posts (city);
+
+-- クラフトブックのページ（イベントの参加メンバーだけが見られる）
+create table if not exists public.craft_pages (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  data jsonb not null default '{}',
+  thumb_path text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists craft_pages_post_idx on public.craft_pages (post_id);
+create index if not exists craft_pages_author_idx on public.craft_pages (author_id);
+alter table public.craft_pages enable row level security;
+
+drop policy if exists "craft: read members" on public.craft_pages;
+create policy "craft: read members" on public.craft_pages for select to authenticated using (is_chat_member(post_id));
+drop policy if exists "craft: insert own" on public.craft_pages;
+create policy "craft: insert own" on public.craft_pages for insert to authenticated
+  with check (author_id = auth.uid() and is_chat_member(post_id));
+drop policy if exists "craft: update own" on public.craft_pages;
+create policy "craft: update own" on public.craft_pages for update to authenticated
+  using (author_id = auth.uid()) with check (author_id = auth.uid() and is_chat_member(post_id));
+drop policy if exists "craft: delete own" on public.craft_pages;
+create policy "craft: delete own" on public.craft_pages for delete to authenticated using (author_id = auth.uid());
+
+-- ステッカーとページの画像は、これまでのイベント写真と同じ非公開の保存場所（event-photos）に入ります。
+-- 参加メンバーだけが読み書きできる設定は、追加①で作成済みです。
