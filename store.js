@@ -8,7 +8,7 @@
      デモモード
      ========================================================= */
   function LocalStore() {
-    const KEY = "domate-demo-v4";
+    const KEY = "domate-demo-v5";
     const iso = (t) => new Date(t).toISOString();
     const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     const H = 3600e3, D = 24 * H;
@@ -48,13 +48,13 @@
           { room_id: "r1", user_id: "u_a", role: "member", nickname: "はるちゃん", bio: "ゼミの写真係" },
         ],
         posts: [
-          { id: "p1", category: "outdoor", line: "oh", station: "伊勢原", author_id: "u_a", kind: "experience", title: "早起きして山頂で朝焼けを見た", body: "朝5時に出発して、山頂で朝焼けを見てきました。寒かったけど、空がピンクからオレンジに変わっていくのが本当にきれいで、早起きした甲斐があった…！下山後の朝ごはんも最高でした。", visibility: "public", room_id: null, created_at: iso(now - 3 * H) },
-          { id: "p2", category: "game", line: "jy", station: "渋谷", author_id: "u_b", kind: "recruit", title: "今週末ボードゲームカフェ行く人！", body: "気になってたボドゲカフェに行きたいけど、一人だとハードルが高くて…。ゆるく遊べる人募集です！", visibility: "public", room_id: null, activity_date: at(3, 14), area: "渋谷", capacity: 3, conditions: "初心者歓迎・ルールは教えます", status: "open", created_at: iso(now - 6 * H) },
-          { id: "p3", category: "food", line: "jc", station: "高円寺", author_id: "u_c", kind: "experience", title: "商店街の食べ歩きスタンプラリー", body: "地元の商店街でやってたスタンプラリーに参加。コロッケ、たい焼き、みたらし団子…全部制覇しました。お店の人と話せるのも楽しかった！", visibility: "public", room_id: null, created_at: iso(now - 1 * D) },
-          { id: "p4", category: "sports", line: "g", station: "表参道", author_id: "u_me", kind: "recruit", title: "朝ランしてからカフェで朝ごはん", body: "週末の朝、軽く5kmくらい走ってから表参道のカフェでモーニングしたいです。一人だと起きられないので…！", visibility: "public", room_id: null, activity_date: at(5, 7), area: "表参道", capacity: 4, conditions: "ゆっくりペース・ラン初心者歓迎", status: "open", created_at: iso(now - 2 * D) },
-          { id: "p5", category: "food", line: "ty", station: "日吉", author_id: "u_a", kind: "experience", title: "ゼミ後に行ったカレー屋が最高だった", body: "駅の裏のスパイスカレー屋さん、みんなで行ったら大当たりでした。次は辛さ5に挑戦したい。", visibility: "room", room_id: "r1", created_at: iso(now - 2 * H) },
-          { id: "p8", category: "sports", line: "jy", station: "池袋", author_id: "u_b", kind: "recruit", title: "ボウリングで本気の3ゲーム勝負", body: "負けた人がジュースおごりで！ゆるく本気でやりましょう。", visibility: "public", room_id: null, activity_date: at(-2, 18), end_at: at(-2, 21), area: "池袋", capacity: 3, conditions: "スコア100以下でも大歓迎", status: "closed", created_at: iso(now - 6 * D) },
-          { id: "p6", category: "walk", line: "jy", station: "日暮里", author_id: "u_c", kind: "recruit", title: "フィルムカメラでおさんぽしませんか", body: "古い街並みをのんびり歩きながら写真を撮りたいです。", visibility: "public", room_id: null, activity_date: at(9, 10), area: "日暮里", capacity: 2, conditions: "カメラがなくてもOK", status: "open", created_at: iso(now - 3 * D) },
+          { id: "p1", city: "伊勢原市", category: "outdoor", line: "oh", station: "伊勢原", author_id: "u_a", kind: "experience", title: "早起きして山頂で朝焼けを見た", body: "朝5時に出発して、山頂で朝焼けを見てきました。寒かったけど、空がピンクからオレンジに変わっていくのが本当にきれいで、早起きした甲斐があった…！下山後の朝ごはんも最高でした。", visibility: "public", room_id: null, created_at: iso(now - 3 * H) },
+          { id: "p2", city: "渋谷区", category: "game", line: "jy", station: "渋谷", author_id: "u_b", kind: "recruit", title: "今週末ボードゲームカフェ行く人！", body: "気になってたボドゲカフェに行きたいけど、一人だとハードルが高くて…。ゆるく遊べる人募集です！", visibility: "public", room_id: null, activity_date: at(3, 14), area: "渋谷", capacity: 3, conditions: "初心者歓迎・ルールは教えます", status: "open", created_at: iso(now - 6 * H) },
+          { id: "p3", city: "杉並区", category: "food", line: "jc", station: "高円寺", author_id: "u_c", kind: "experience", title: "商店街の食べ歩きスタンプラリー", body: "地元の商店街でやってたスタンプラリーに参加。コロッケ、たい焼き、みたらし団子…全部制覇しました。お店の人と話せるのも楽しかった！", visibility: "public", room_id: null, created_at: iso(now - 1 * D) },
+          { id: "p4", city: "渋谷区", category: "sports", line: "jy", station: "原宿", author_id: "u_me", kind: "recruit", title: "朝ランしてからカフェで朝ごはん", body: "週末の朝、軽く5kmくらい走ってから表参道のカフェでモーニングしたいです。一人だと起きられないので…！", visibility: "public", room_id: null, activity_date: at(5, 7), area: "原宿", capacity: 4, conditions: "ゆっくりペース・ラン初心者歓迎", status: "open", created_at: iso(now - 2 * D) },
+          { id: "p5", city: "横浜市", category: "food", line: "ty", station: "日吉", author_id: "u_a", kind: "experience", title: "ゼミ後に行ったカレー屋が最高だった", body: "駅の裏のスパイスカレー屋さん、みんなで行ったら大当たりでした。次は辛さ5に挑戦したい。", visibility: "room", room_id: "r1", created_at: iso(now - 2 * H) },
+          { id: "p8", city: "豊島区", category: "sports", line: "jy", station: "池袋", author_id: "u_b", kind: "recruit", title: "ボウリングで本気の3ゲーム勝負", body: "負けた人がジュースおごりで！ゆるく本気でやりましょう。", visibility: "public", room_id: null, activity_date: at(-2, 18), end_at: at(-2, 21), area: "池袋", capacity: 3, conditions: "スコア100以下でも大歓迎", status: "closed", created_at: iso(now - 6 * D) },
+          { id: "p6", city: "荒川区", category: "walk", line: "jy", station: "日暮里", author_id: "u_c", kind: "recruit", title: "フィルムカメラでおさんぽしませんか", body: "古い街並みをのんびり歩きながら写真を撮りたいです。", visibility: "public", room_id: null, activity_date: at(9, 10), area: "日暮里", capacity: 2, conditions: "カメラがなくてもOK", status: "open", created_at: iso(now - 3 * D) },
         ],
         likes: [
           { post_id: "p1", user_id: "u_b" }, { post_id: "p1", user_id: "u_c" },
@@ -83,6 +83,7 @@
         share_consents: [
           { post_id: "p8", user_id: "u_b" }, { post_id: "p8", user_id: "u_c" },
         ],
+        craft_pages: [],
         reports: [],
         blocks: [],
       };
@@ -140,12 +141,13 @@
       async uploadAvatar(blob) { return blobToDataUrl(blob); },
       async updateProfile(patch) { Object.assign(db.profiles.find((p) => p.id === me()), patch); save(); },
 
-      async listPosts({ roomId, kind, categories, stations, from, to } = {}) {
+      async listPosts({ roomId, kind, categories, stations, cities, from, to } = {}) {
+        const anyArea = (stations && stations.length) || (cities && cities.length);
         return db.posts
           .filter((p) => (roomId ? p.room_id === roomId : p.visibility === "public"))
           .filter((p) => !kind || p.kind === kind)
           .filter((p) => !categories || !categories.length || categories.includes(p.category))
-          .filter((p) => !stations || !stations.length || stations.includes(p.station))
+          .filter((p) => !anyArea || (stations || []).includes(p.station) || (cities || []).includes(p.city))
           .filter((p) => !from || (p.activity_date && p.activity_date >= from && p.activity_date < to))
           .filter(canSee).sort(byNewest).map(decorate);
       },
@@ -172,7 +174,7 @@
       async deletePost(id) {
         const p = db.posts.find((x) => x.id === id); need(p && p.author_id === me(), "権限がありません");
         db.posts = db.posts.filter((x) => x.id !== id);
-        ["likes", "comments", "join_requests", "messages", "event_photos", "share_consents"].forEach((t) => (db[t] = db[t].filter((x) => x.post_id !== id)));
+        ["likes", "comments", "join_requests", "messages", "event_photos", "share_consents", "craft_pages"].forEach((t) => (db[t] = db[t].filter((x) => x.post_id !== id)));
         save();
       },
 
@@ -227,6 +229,34 @@
         db.event_photos.push({ id: newId(), post_id: postId, uploader_id: me(), data: await blobToDataUrl(blob), created_at: iso(Date.now()) }); save();
       },
       async deleteEventPhoto(photo) { db.event_photos = db.event_photos.filter((x) => !(x.id === photo.id && x.uploader_id === me())); save(); },
+      async listCraftPages(postId) {
+        const p = db.posts.find((x) => x.id === postId); need(p && isChatMember(p), "参加者ではありません");
+        if (!db.craft_pages) db.craft_pages = [];
+        return db.craft_pages.filter((c) => c.post_id === postId).sort(byNewest).map((c) => ({ ...c, author: prof(c.author_id), thumb_url: c.thumb }));
+      },
+      async listMyCraftPages() {
+        return (db.craft_pages || []).filter((c) => c.author_id === me()).sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)).map((c) => {
+          const p = db.posts.find((x) => x.id === c.post_id);
+          return { ...c, thumb_url: c.thumb, post: p ? { id: p.id, title: p.title, activity_date: p.activity_date } : null };
+        });
+      },
+      async getCraftPage(id) {
+        const c = (db.craft_pages || []).find((x) => x.id === id); if (!c) return null;
+        const p = db.posts.find((x) => x.id === c.post_id); need(p && isChatMember(p), "参加者ではありません");
+        return { ...c, author: prof(c.author_id) };
+      },
+      async saveCraftPage({ id, post_id, data, thumbBlob }) {
+        const p = db.posts.find((x) => x.id === post_id); need(p && isChatMember(p), "参加者ではありません");
+        if (!db.craft_pages) db.craft_pages = [];
+        const thumb = thumbBlob ? await blobToDataUrl(thumbBlob) : null;
+        let c = id && db.craft_pages.find((x) => x.id === id);
+        if (c) { need(c.author_id === me(), "自分のページだけ編集できます"); Object.assign(c, { data, thumb: thumb || c.thumb, updated_at: iso(Date.now()) }); }
+        else { c = { id: newId(), post_id, author_id: me(), data, thumb, created_at: iso(Date.now()), updated_at: iso(Date.now()) }; db.craft_pages.push(c); }
+        save(); return { id: c.id };
+      },
+      async deleteCraftPage(id) { db.craft_pages = (db.craft_pages || []).filter((c) => !(c.id === id && c.author_id === me())); save(); },
+      async uploadSticker(postId, blob) { return { src: await blobToDataUrl(blob) }; },
+      async stickerUrl(ref) { return ref.src; },
       async listShareConsents(postId) { return db.share_consents.filter((c) => c.post_id === postId).map((c) => c.user_id); },
       async setShareConsent(postId, okay) {
         db.share_consents = db.share_consents.filter((c) => !(c.post_id === postId && c.user_id === me()));
@@ -318,12 +348,16 @@
         return sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
       },
 
-      async listPosts({ roomId, kind, categories, stations, from, to } = {}) {
+      async listPosts({ roomId, kind, categories, stations, cities, from, to } = {}) {
         let q = sb.from("posts").select(POST).order("created_at", { ascending: false }).limit(100);
         q = roomId ? q.eq("room_id", roomId) : q.eq("visibility", "public");
         if (kind) q = q.eq("kind", kind);
         if (categories && categories.length) q = q.in("category", categories);
-        if (stations && stations.length) q = q.in("station", stations);
+        const qv = (arr) => arr.map((v) => `"${String(v).replace(/"/g, "")}"`).join(",");
+        const ors = [];
+        if (stations && stations.length) ors.push(`station.in.(${qv(stations)})`);
+        if (cities && cities.length) ors.push(`city.in.(${qv(cities)})`);
+        if (ors.length) q = q.or(ors.join(","));
         if (from) q = q.gte("activity_date", from).lt("activity_date", to);
         return ok(await q);
       },
@@ -380,6 +414,40 @@
       async deleteEventPhoto(photo) {
         await sb.storage.from("event-photos").remove([photo.path]);
         ok(await sb.from("event_photos").delete().eq("id", photo.id));
+      },
+      async listCraftPages(postId) {
+        const rows = ok(await sb.from("craft_pages").select("*, author:profiles(id,display_name,avatar_url)").eq("post_id", postId).order("updated_at", { ascending: false }));
+        return Promise.all(rows.map(async (r) => ({ ...r, thumb_url: r.thumb_path ? await this.stickerUrl({ path: r.thumb_path }) : null })));
+      },
+      async listMyCraftPages() {
+        const rows = ok(await sb.from("craft_pages").select("*, post:posts(id,title,activity_date)").eq("author_id", me()).order("updated_at", { ascending: false }));
+        return Promise.all(rows.map(async (r) => ({ ...r, thumb_url: r.thumb_path ? await this.stickerUrl({ path: r.thumb_path }) : null })));
+      },
+      async getCraftPage(id) { return ok(await sb.from("craft_pages").select("*, author:profiles(id,display_name,avatar_url)").eq("id", id).maybeSingle()); },
+      async saveCraftPage({ id, post_id, data, thumbBlob }) {
+        let thumb_path;
+        if (thumbBlob) {
+          thumb_path = `${post_id}/craft-${me()}-${Date.now()}.jpg`;
+          ok(await sb.storage.from("event-photos").upload(thumb_path, thumbBlob, { contentType: "image/jpeg" }));
+        }
+        const row = { data, updated_at: new Date().toISOString(), ...(thumb_path ? { thumb_path } : {}) };
+        if (id) { ok(await sb.from("craft_pages").update(row).eq("id", id)); return { id }; }
+        return ok(await sb.from("craft_pages").insert({ ...row, post_id, author_id: me() }).select("id").single());
+      },
+      async deleteCraftPage(id) { ok(await sb.from("craft_pages").delete().eq("id", id)); },
+      async uploadSticker(postId, blob) {
+        const path = `${postId}/sticker-${me()}-${Date.now()}.png`;
+        ok(await sb.storage.from("event-photos").upload(path, blob, { contentType: "image/png" }));
+        return { path };
+      },
+      async stickerUrl(ref) {
+        if (!ref) return null;
+        if (ref.src) return ref.src;
+        if (!this._urls) this._urls = new Map();
+        if (this._urls.has(ref.path)) return this._urls.get(ref.path);
+        const { data, error } = await sb.storage.from("event-photos").download(ref.path);
+        if (error) return null;
+        const u = URL.createObjectURL(data); this._urls.set(ref.path, u); return u;
       },
       async listShareConsents(postId) { return ok(await sb.from("share_consents").select("user_id").eq("post_id", postId)).map((r) => r.user_id); },
       async setShareConsent(postId, okay) {

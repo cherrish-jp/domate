@@ -465,3 +465,143 @@ create policy "avatars: upload own" on storage.objects for insert to authenticat
 drop policy if exists "avatars: delete own" on storage.objects;
 create policy "avatars: delete own" on storage.objects for delete to authenticated
   using (bucket_id = 'avatars' and owner = auth.uid());
+-- =============================================================
+-- 追加④：運営用の集計画面（admin.html）
+-- SQL Editor に貼り付けて Run（何度実行しても大丈夫です）
+-- 実行後、いちばん下の「管理者の登録」も忘れずに。
+-- =============================================================
+
+-- 管理者の一覧（アプリからは読めない。SQL Editor でだけ追加できる）
+create table if not exists public.admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.admins enable row level security;
+
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from admins where user_id = auth.uid());
+$$;
+
+-- 通報の対応状況
+alter table public.reports add column if not exists status text not null default 'open';
+alter table public.reports drop constraint if exists reports_status_check;
+alter table public.reports add constraint reports_status_check check (status in ('open', 'done'));
+
+-- 集計（個人が特定できる情報やチャットの中身は返さない）
+create or replace function public.admin_stats()
+returns json language plpgsql stable security definer set search_path = public as $$
+declare r json;
+begin
+  if not is_admin() then raise exception 'not admin'; end if;
+  select json_build_object(
+    'users_total', (select count(*) from profiles),
+    'users_7d', (select count(*) from profiles where created_at > now() - interval '7 days'),
+    'active_7d', (select count(distinct uid) from (
+        select author_id as uid from posts where created_at > now() - interval '7 days'
+        union select author_id from comments where created_at > now() - interval '7 days'
+        union select user_id from join_requests where created_at > now() - interval '7 days'
+        union select author_id from messages where created_at > now() - interval '7 days') t),
+    'posts_experience', (select count(*) from posts where kind = 'experience'),
+    'posts_recruit', (select count(*) from posts where kind = 'recruit'),
+    'posts_room', (select count(*) from posts where visibility = 'room'),
+    'requests_total', (select count(*) from join_requests),
+    'requests_approved', (select count(*) from join_requests where status = 'approved'),
+    'recruits_realized', (select count(*) from posts p where p.kind = 'recruit'
+        and coalesce(p.end_at, p.activity_date + interval '3 hours') < now()
+        and exists (select 1 from join_requests j where j.post_id = p.id and j.status = 'approved')),
+    'collage_posts', (select count(*) from posts where source_post_id is not null and kind = 'experience'),
+    'rooms_total', (select count(*) from rooms),
+    'rooms_active_30d', (select count(distinct room_id) from posts where room_id is not null and created_at > now() - interval '30 days'),
+    'reports_open', (select count(*) from reports where status = 'open'),
+    'categories', (select coalesce(json_agg(x), '[]') from (select category as key, count(*) as n from posts where category is not null group by category order by n desc) x),
+    'stations', (select coalesce(json_agg(x), '[]') from (select station as key, count(*) as n from posts where kind = 'recruit' and station is not null group by station order by n desc limit 10) x),
+    'ages', (select coalesce(json_agg(x), '[]') from (select coalesce(age_range, 'unset') as key, count(*) as n from profiles group by 1 order by 1) x),
+    'genders', (select coalesce(json_agg(x), '[]') from (select gender as key, count(*) as n from profiles group by 1 order by 2 desc) x),
+    'weekly', (select coalesce(json_agg(w order by w.week), '[]') from (
+        select to_char(gs, 'MM/DD') as label, gs as week,
+          (select count(*) from profiles where created_at >= gs and created_at < gs + interval '7 days') as users,
+          (select count(*) from posts where created_at >= gs and created_at < gs + interval '7 days') as posts,
+          (select count(*) from join_requests where status = 'approved' and created_at >= gs and created_at < gs + interval '7 days') as matches
+        from generate_series(date_trunc('week', now()) - interval '7 weeks', date_trunc('week', now()), interval '1 week') gs) w)
+  ) into r;
+  return r;
+end $$;
+
+-- 通報の一覧（利用規約で定めた「通報時の確認」のため、通報された内容だけを返す）
+create or replace function public.admin_reports()
+returns json language plpgsql stable security definer set search_path = public as $$
+declare r json;
+begin
+  if not is_admin() then raise exception 'not admin'; end if;
+  select coalesce(json_agg(x order by x.created_at desc), '[]') into r from (
+    select rp.id, rp.created_at, rp.target_type, rp.target_id, rp.reason, rp.status,
+      case rp.target_type
+        when 'post' then (select title || coalesce(' / ' || left(body, 200), '') from posts where id = rp.target_id)
+        when 'comment' then (select left(body, 200) from comments where id = rp.target_id)
+        when 'message' then (select left(body, 200) from messages where id = rp.target_id)
+        when 'user' then (select display_name || coalesce(' / ' || left(bio, 120), '') from profiles where id = rp.target_id)
+      end as preview
+    from reports rp order by rp.created_at desc limit 100) x;
+  return r;
+end $$;
+
+create or replace function public.admin_set_report_status(p_id uuid, p_status text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not admin'; end if;
+  update reports set status = p_status where id = p_id;
+end $$;
+
+-- 規約違反の投稿・コメントを削除する
+create or replace function public.admin_remove(p_type text, p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not admin'; end if;
+  if p_type = 'post' then delete from posts where id = p_id;
+  elsif p_type = 'comment' then delete from comments where id = p_id;
+  elsif p_type = 'message' then delete from messages where id = p_id;
+  end if;
+end $$;
+
+-- -------------------------------------------------------------
+-- 管理者の登録：下の 'あなたのメールアドレス' を、domate に登録した
+-- 自分のメールアドレスに書き換えてから、この1行だけ選んで Run
+-- -------------------------------------------------------------
+-- insert into public.admins (user_id) select id from auth.users where email = 'あなたのメールアドレス' on conflict do nothing;
+-- =============================================================
+-- 追加⑤：クラフトブック（ステッカーで作るおもいでページ）と、地名（市区町村）での検索
+-- SQL Editor に貼り付けて Run（何度実行しても大丈夫です）
+-- =============================================================
+
+-- 投稿：市区町村
+alter table public.posts add column if not exists city text check (city is null or char_length(city) <= 20);
+create index if not exists posts_city_idx on public.posts (city);
+
+-- クラフトブックのページ（イベントの参加メンバーだけが見られる）
+create table if not exists public.craft_pages (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.posts(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  data jsonb not null default '{}',
+  thumb_path text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists craft_pages_post_idx on public.craft_pages (post_id);
+create index if not exists craft_pages_author_idx on public.craft_pages (author_id);
+alter table public.craft_pages enable row level security;
+
+drop policy if exists "craft: read members" on public.craft_pages;
+create policy "craft: read members" on public.craft_pages for select to authenticated using (is_chat_member(post_id));
+drop policy if exists "craft: insert own" on public.craft_pages;
+create policy "craft: insert own" on public.craft_pages for insert to authenticated
+  with check (author_id = auth.uid() and is_chat_member(post_id));
+drop policy if exists "craft: update own" on public.craft_pages;
+create policy "craft: update own" on public.craft_pages for update to authenticated
+  using (author_id = auth.uid()) with check (author_id = auth.uid() and is_chat_member(post_id));
+drop policy if exists "craft: delete own" on public.craft_pages;
+create policy "craft: delete own" on public.craft_pages for delete to authenticated using (author_id = auth.uid());
+
+-- ステッカーとページの画像は、これまでのイベント写真と同じ非公開の保存場所（event-photos）に入ります。
+-- 参加メンバーだけが読み書きできる設定は、追加①で作成済みです。

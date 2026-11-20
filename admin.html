@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>domate 運営ダッシュボード</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Murecho:wght@400;500;700;800;900&family=Archivo:wdth,wght@125,700;125,800;125,900&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #000; --soft: #6f6f6f; --line: #e8e8e8; --wash: #f5f5f5; --tomato: #ff3b1f; --blue: #3a55c8; --leaf: #00a35c; --wide: "Archivo", "Murecho", sans-serif; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Murecho", system-ui, sans-serif; color: var(--ink); background: #fff; line-height: 1.6; font-feature-settings: "palt"; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; border: none; background: none; }
+  :focus-visible { outline: 2px solid var(--tomato); outline-offset: 2px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 20px 64px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .brand { display: flex; align-items: center; gap: 8px; font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: 1.3rem; }
+  .brand .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--tomato); box-shadow: 5px -5px 0 -3.5px var(--leaf); }
+  .tag { font-size: .75rem; font-weight: 800; background: var(--ink); color: #fff; border-radius: 6px; padding: 2px 8px; }
+  .spacer { flex: 1; }
+  .note { font-size: .82rem; color: var(--soft); margin: 4px 0 24px; max-width: 46em; }
+  .sample { background: #fff4cc; color: #7a5a00; font-weight: 700; font-size: .85rem; border-radius: 10px; padding: 10px 14px; margin-bottom: 20px; }
+  h2 { font-size: 1.05rem; font-weight: 800; margin: 36px 0 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  h2 small { flex-basis: auto; }
+  h2 small { font-weight: 500; font-size: .78rem; color: var(--soft); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .tile { border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+  .tile .k { font-size: .8rem; font-weight: 700; color: var(--soft); }
+  .tile .v { font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: 2rem; line-height: 1.2; }
+  .tile .s { font-size: .75rem; color: var(--soft); }
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border: 1.5px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .flow > div { padding: 14px 16px; border-right: 1.5px solid var(--line); position: relative; }
+  .flow > div:last-child { border-right: none; }
+  .flow .v { font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: 1.7rem; }
+  .flow .k { font-size: .8rem; font-weight: 700; color: var(--soft); }
+  .flow .r { font-size: .75rem; font-weight: 700; color: var(--blue); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .panel { border: 1.5px solid var(--line); border-radius: 16px; padding: 16px 18px; min-width: 0; }
+  .panel h3 { font-size: .9rem; font-weight: 800; margin-bottom: 10px; }
+  .bars { display: grid; gap: 7px; }
+  .bar { display: grid; grid-template-columns: 7.5em 1fr 2.5em; gap: 10px; align-items: center; font-size: .84rem; }
+  .bar .lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar .track { height: 14px; border-radius: 0 4px 4px 0; background: transparent; position: relative; }
+  .bar .fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--blue); min-width: 2px; }
+  .bar .num { text-align: right; font-family: var(--wide); font-stretch: 125%; font-weight: 800; font-size: .82rem; }
+  .bar:hover .fill { background: #2f47ab; }
+  .weeks { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  svg.wk text { font-family: var(--wide); font-stretch: 125%; font-size: 10px; fill: var(--soft); }
+  svg.wk .col { fill: var(--blue); }
+  svg.wk g.hit:hover .col { fill: #2f47ab; }
+  svg.wk .gl { stroke: var(--line); }
+  .tip { position: fixed; pointer-events: none; background: #000; color: #fff; font-size: .78rem; padding: 4px 9px; border-radius: 6px; display: none; z-index: 10; }
+  table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: .84rem; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .75rem; color: var(--soft); font-weight: 700; }
+  .scroll { overflow-x: auto; }
+  .pill { font-size: .72rem; font-weight: 800; border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+  .pill.open { background: #fff4cc; color: #7a5a00; }
+  .pill.done { background: var(--wash); color: var(--soft); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 12px; border-radius: 10px; font-weight: 800; font-size: .8rem; white-space: nowrap; }
+  .btn.dark { background: var(--ink); color: #fff; }
+  .btn.line { border: 1.5px solid var(--ink); }
+  .btn.danger { border: 1.5px solid var(--tomato); color: var(--tomato); }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .login { max-width: 380px; margin: 80px auto; }
+  .login label { display: block; font-size: .84rem; font-weight: 800; margin: 14px 0 6px; }
+  .login input { width: 100%; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--wash); }
+  .login .btn { width: 100%; min-height: 48px; margin-top: 18px; font-size: .95rem; }
+  .err { color: var(--tomato); font-size: .85rem; margin-top: 10px; }
+  .empty { color: var(--soft); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div id="root" class="wrap"><p class="empty">読み込み中…</p></div>
+<div class="tip" id="tip"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="areas.js"></script>
+<script>
+(function () {
+  const cfg = window.DOMATE_CONFIG || {};
+  const root = document.getElementById("root");
+  const tip = document.getElementById("tip");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const CAT = Object.fromEntries((window.DOMATE_CATEGORIES || []).map((c) => [c.id, c.name]));
+  const AGE = Object.fromEntries((window.DOMATE_AGES || []).map((a) => [a.id, a.name])); AGE.unset = "未設定";
+  const GEN = Object.fromEntries((window.DOMATE_GENDERS || []).map((g) => [g.id, g.name]));
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "－");
+  const live = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase);
+  const sb = live ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+
+  // ---- サンプル（Supabase 未設定のときの見本）
+  const SAMPLE = {
+    users_total: 42, users_7d: 9, active_7d: 17, posts_experience: 38, posts_recruit: 26, posts_room: 21,
+    requests_total: 61, requests_approved: 44, recruits_realized: 15, collage_posts: 7, rooms_total: 5, rooms_active_30d: 4, reports_open: 1,
+    categories: [{ key: "food", n: 18 }, { key: "game", n: 11 }, { key: "music", n: 9 }, { key: "outdoor", n: 8 }, { key: "walk", n: 6 }, { key: "sports", n: 5 }, { key: "study", n: 4 }, { key: "other", n: 3 }],
+    stations: [{ key: "渋谷", n: 6 }, { key: "新宿", n: 4 }, { key: "下北沢", n: 3 }, { key: "吉祥寺", n: 3 }, { key: "横浜", n: 2 }, { key: "池袋", n: 2 }, { key: "オンライン", n: 2 }],
+    ages: [{ key: "18-19", n: 8 }, { key: "20s", n: 27 }, { key: "30s", n: 5 }, { key: "40s", n: 2 }],
+    genders: [{ key: "female", n: 19 }, { key: "male", n: 15 }, { key: "none", n: 8 }],
+    weekly: ["09/21", "09/28", "10/05", "10/12", "10/19", "10/26", "11/02", "11/09"].map((label, i) => ({ label, users: [0, 2, 3, 5, 4, 8, 11, 9][i], posts: [0, 3, 5, 6, 8, 11, 17, 14][i], matches: [0, 1, 2, 4, 5, 7, 13, 12][i] })),
+  };
+  const SAMPLE_REPORTS = [{ id: "s1", created_at: new Date(Date.now() - 2 * 864e5).toISOString(), target_type: "post", target_id: "x", reason: "スパム・宣伝：外部のセミナーへの勧誘", status: "open", preview: "副業に興味ある人集まりませんか / 簡単に月5万円…" }];
+
+  // ---- 部品
+  function bars(rows, label) {
+    if (!rows.length) return '<p class="empty">まだデータがありません</p>';
+    const max = Math.max(...rows.map((r) => r.n));
+    return `<div class="bars">${rows.map((r) => `<div class="bar" title="${esc(label(r.key))}：${r.n}"><span class="lab">${esc(label(r.key))}</span><span class="track"><span class="fill" style="display:block;width:${(r.n / max) * 100}%"></span></span><span class="num">${r.n}</span></div>`).join("")}</div>`;
+  }
+  function weekChart(rows, key, title, unit) {
+    const W = 320, H = 150, pl = 26, pb = 22, pt = 10, n = rows.length, gap = 6;
+    const max = Math.max(1, ...rows.map((r) => r[key]));
+    const nice = Math.ceil(max / 5) * 5 || 5;
+    const bw = (W - pl - gap * (n - 1) - 4) / n;
+    const y = (v) => pt + (H - pt - pb) * (1 - v / nice);
+    let s = "";
+    [0, nice / 2, nice].forEach((g) => { s += `<line class="gl" x1="${pl}" x2="${W}" y1="${y(g)}" y2="${y(g)}"/><text x="${pl - 6}" y="${y(g) + 3}" text-anchor="end">${g}</text>`; });
+    rows.forEach((r, i) => {
+      const x = pl + 4 + i * (bw + gap), v = r[key], top = y(v), h = Math.max(0, y(0) - top);
+      const rr = Math.min(4, h, bw / 2);
+      const d = h > 0 ? `M${x},${y(0)} V${top + rr} Q${x},${top} ${x + rr},${top} H${x + bw - rr} Q${x + bw},${top} ${x + bw},${top + rr} V${y(0)} Z` : "";
+      s += `<g class="hit" data-tip="${esc(r.label)}の週　${v}${unit}"><path class="col" d="${d}"/><rect x="${x - gap / 2}" y="${pt}" width="${bw + gap}" height="${H - pt - pb}" fill="transparent"/></g>`;
+      if (i % 2 === 1 || n <= 6) s += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${esc(r.label)}</text>`;
+    });
+    const total = rows.reduce((a, r) => a + r[key], 0);
+    return `<div class="panel"><h3>${title}</h3><svg class="wk" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${title}。直近8週間の合計 ${total}${unit}">${s}</svg></div>`;
+  }
+
+  function render(st, reports, sample) {
+    const reqRate = pct(st.requests_approved, st.requests_total);
+    root.innerHTML = `
+      <header><div class="brand"><span class="dot"></span>domate</div><span class="tag">運営</span><span class="spacer"></span>
+        <button class="btn line" id="reload">更新</button>${sample ? "" : '<button class="btn line" id="logout">ログアウト</button>'}</header>
+      <p class="note">ここに出るのは集計した数字と、通報された内容だけです。チャットやルーム限定投稿の中身、メールアドレスは表示しません。</p>
+      ${sample ? '<div class="sample">サンプル表示です。config.js に Supabase のキーを入れると、本物の数字が表示されます。</div>' : ""}
+
+      <h2>ユーザー</h2>
+      <div class="tiles">
+        <div class="tile"><div class="k">登録ユーザー</div><div class="v">${st.users_total}</div><div class="s">この7日で +${st.users_7d}</div></div>
+        <div class="tile"><div class="k">この7日に動いた人</div><div class="v">${st.active_7d}</div><div class="s">投稿・コメント・申請・チャットのどれか</div></div>
+        <div class="tile"><div class="k">ルーム</div><div class="v">${st.rooms_total}</div><div class="s">30日以内に投稿あり ${st.rooms_active_30d}</div></div>
+        <div class="tile"><div class="k">未対応の通報</div><div class="v" style="color:${st.reports_open ? "var(--tomato)" : "inherit"}">${st.reports_open}</div><div class="s">下の一覧で確認</div></div>
+      </div>
+
+      <h2>募集から実現まで <small>募集が実際に会うところまで進んでいるか</small></h2>
+      <div class="flow">
+        <div><div class="k">仲間募集</div><div class="v">${st.posts_recruit}</div></div>
+        <div><div class="k">参加申請</div><div class="v">${st.requests_total}</div><div class="r">募集1件あたり ${st.posts_recruit ? (st.requests_total / st.posts_recruit).toFixed(1) : "－"}件</div></div>
+        <div><div class="k">参加決定</div><div class="v">${st.requests_approved}</div><div class="r">申請の ${reqRate}</div></div>
+        <div><div class="k">実現した募集</div><div class="v">${st.recruits_realized}</div><div class="r">募集の ${pct(st.recruits_realized, st.posts_recruit)}</div></div>
+        <div><div class="k">おもいでの投稿</div><div class="v">${st.collage_posts}</div><div class="r">実現の ${pct(st.collage_posts, st.recruits_realized)}</div></div>
+      </div>
+
+      <h2>週ごとの動き <small>直近8週間</small></h2>
+      <div class="weeks">
+        ${weekChart(st.weekly, "users", "新規登録", "人")}
+        ${weekChart(st.weekly, "posts", "投稿", "件")}
+        ${weekChart(st.weekly, "matches", "参加決定", "件")}
+      </div>
+
+      <h2>どんなことが募集されているか</h2>
+      <div class="grid2">
+        <div class="panel"><h3>カテゴリ別の投稿</h3>${bars(st.categories, (k) => CAT[k] || k)}</div>
+        <div class="panel"><h3>募集が多い駅・エリア（上位10）</h3>${bars(st.stations, (k) => k)}</div>
+      </div>
+
+      <h2>使っている人</h2>
+      <div class="grid2">
+        <div class="panel"><h3>年代</h3>${bars(st.ages, (k) => AGE[k] || k)}</div>
+        <div class="panel"><h3>性別</h3>${bars(st.genders, (k) => GEN[k] || k)}</div>
+      </div>
+      <p class="note" style="margin-top:10px">投稿 ${st.posts_experience + st.posts_recruit}件のうち、体験シェア ${st.posts_experience}件・仲間募集 ${st.posts_recruit}件、ルーム限定 ${st.posts_room}件。</p>
+
+      <h2>通報 <small>利用規約にもとづき、通報された内容だけを確認できます</small></h2>
+      <div class="panel scroll">${reports.length ? `<table><thead><tr><th>日時</th><th>対象</th><th>理由</th><th>内容</th><th>状態</th><th></th></tr></thead><tbody>
+        ${reports.map((r) => `<tr>
+          <td>${new Date(r.created_at).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+          <td>${{ post: "投稿", comment: "コメント", message: "チャット", user: "ユーザー" }[r.target_type] || esc(r.target_type)}</td>
+          <td>${esc(r.reason)}</td>
+          <td>${r.preview ? esc(r.preview) : '<span class="empty">削除済み</span>'}</td>
+          <td><span class="pill ${r.status}">${r.status === "open" ? "未対応" : "対応済み"}</span></td>
+          <td><div class="acts">
+            ${r.status === "open" ? `<button class="btn dark" data-done="${r.id}">対応済みにする</button>` : `<button class="btn line" data-reopen="${r.id}">未対応に戻す</button>`}
+            ${r.preview && ["post", "comment", "message"].includes(r.target_type) ? `<button class="btn danger" data-remove="${r.target_type}:${r.target_id}">削除する</button>` : ""}
+          </div></td></tr>`).join("")}</tbody></table>` : '<p class="empty">通報はありません</p>'}</div>`;
+
+    document.getElementById("reload").onclick = load;
+    const lo = document.getElementById("logout"); if (lo) lo.onclick = async () => { await sb.auth.signOut(); load(); };
+    root.querySelectorAll("[data-done],[data-reopen]").forEach((b) => b.onclick = () => act(() => sb.rpc("admin_set_report_status", { p_id: b.dataset.done || b.dataset.reopen, p_status: b.dataset.done ? "done" : "open" }), sample));
+    root.querySelectorAll("[data-remove]").forEach((b) => b.onclick = () => {
+      const [t, id] = b.dataset.remove.split(":");
+      if (!confirm("この内容を削除します。元に戻せません。よろしいですか？")) return;
+      act(() => sb.rpc("admin_remove", { p_type: t, p_id: id }), sample);
+    });
+    root.querySelectorAll("[data-tip]").forEach((el) => {
+      el.addEventListener("mousemove", (e) => { tip.textContent = el.dataset.tip; tip.style.display = "block"; tip.style.left = e.clientX + 12 + "px"; tip.style.top = e.clientY - 30 + "px"; });
+      el.addEventListener("mouseleave", () => (tip.style.display = "none"));
+    });
+  }
+  async function act(fn, sample) {
+    if (sample) { alert("サンプル表示では操作できません"); return; }
+    const { error } = await fn(); if (error) { alert(error.message); return; } load();
+  }
+
+  function renderLogin(msg) {
+    root.innerHTML = `<form class="login" id="lf"><div class="brand"><span class="dot"></span>domate <span class="tag">運営</span></div>
+      <p class="note" style="margin-top:10px">管理者として登録したアカウントでログインしてください。</p>
+      <label for="em">メールアドレス</label><input id="em" type="email" required autocomplete="email">
+      <label for="pw">パスワード</label><input id="pw" type="password" required autocomplete="current-password">
+      <button class="btn dark" type="submit">ログイン</button><p class="err">${esc(msg || "")}</p></form>`;
+    document.getElementById("lf").onsubmit = async (e) => {
+      e.preventDefault();
+      const { error } = await sb.auth.signInWithPassword({ email: document.getElementById("em").value.trim(), password: document.getElementById("pw").value });
+      if (error) renderLogin("メールアドレスかパスワードが違います"); else load();
+    };
+  }
+
+  async function load() {
+    if (!live) { render(SAMPLE, SAMPLE_REPORTS, true); return; }
+    const { data: s } = await sb.auth.getSession();
+    if (!s.session) { renderLogin(); return; }
+    const [a, b] = await Promise.all([sb.rpc("admin_stats"), sb.rpc("admin_reports")]);
+    if (a.error) {
+      if (/not admin/.test(a.error.message)) { await sb.auth.signOut(); renderLogin("このアカウントは管理者として登録されていません。SQL Editor で管理者の登録をしてください。"); }
+      else root.innerHTML = `<p class="err">読み込めませんでした：${esc(a.error.message)}<br>update-4-admin.sql を実行したか確認してください。</p>`;
+      return;
+    }
+    render(a.data, b.data || [], false);
+  }
+  load();
+})();
+</script>
+</body>
+</html>

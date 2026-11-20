@@ -6,7 +6,10 @@
   let blocked = new Set();     // ブロック中のユーザーID
   let pollTimer = null;        // チャットの自動更新
   const cache = new Map();     // 表示中の投稿
-  const state = { feedKind: "", filters: { cats: [], lines: [], extra: [], date: null } };
+  const state = { feedKind: "", filters: { cats: [], lines: [], extra: [], cities: [], date: null } };
+  const CITIES = window.DOMATE_CITIES || {};
+  const PREFS = ((AREAS_RAW) => { const p = (AREAS_RAW.flatMap((g) => g.lines).find((l) => l.id === "pref") || { stations: [] }).stations; return p; })(window.DOMATE_AREAS || []);
+  const citiesOf = (pref) => (CITIES[pref] && CITIES[pref].length ? CITIES[pref] : [pref]);
   const AREAS = window.DOMATE_AREAS || [], CATS = window.DOMATE_CATEGORIES || [];
   const GENDERS = window.DOMATE_GENDERS || [], AGES = window.DOMATE_AGES || [], TAGS = window.DOMATE_TAGS || [];
   const ALL_LINES = AREAS.flatMap((g) => g.lines);
@@ -15,7 +18,12 @@
   const genderName = (id) => (GENDERS.find((g) => g.id === id) || {}).name || "";
   const ageName = (id) => (AGES.find((a) => a.id === id) || {}).name || "";
   const trustText = (u) => [ageName(u.age_range), u.gender && u.gender !== "none" ? genderName(u.gender) : ""].filter(Boolean).join("・");
-  const areaText = (p) => (p.station ? (p.line && !["online", "pref"].includes(p.line) && lineById(p.line) ? `${p.station}（${lineById(p.line).name}）` : p.station) : p.area || "");
+  const areaText = (p) => {
+    const st = p.station && !["online", "pref"].includes(p.line) ? `${p.station}駅` : "";
+    if (p.line === "online" || p.city === "オンライン") return "オンライン";
+    if (p.city) return st ? `${p.city}（${st}）` : p.city;
+    return p.station ? (st ? `${st}（${(lineById(p.line) || {}).name || ""}）` : p.station) : p.area || "";
+  };
   function filterStations() {
     const f = state.filters;
     const set = new Set(f.extra);
@@ -323,13 +331,13 @@
     const dateKind = f.date ? "recruit" : state.feedKind || undefined;
     const [rooms, posts, members] = await Promise.all([
       S.listMyRooms(),
-      S.listPosts({ roomId, kind: dateKind, categories: f.cats, stations: filterStations(), from: f.date && f.date.from, to: f.date && f.date.to }),
+      S.listPosts({ roomId, kind: dateKind, categories: f.cats, stations: filterStations(), cities: f.cities, from: f.date && f.date.from, to: f.date && f.date.to }),
       roomId ? S.getRoomMembers(roomId) : Promise.resolve([]),
     ]);
     const nick = Object.fromEntries(members.filter((m) => m.nickname).map((m) => [m.user_id, m.nickname]));
     const list = posts.filter((p) => !blocked.has(p.author_id)).map((p) => ({ ...p, nick: nick[p.author_id] }));
     const chips = `<div class="chips">
-        <a class="chip${roomId ? "" : " on"}" href="#/">みんな</a>
+        <a class="chip${roomId ? "" : " on"}" href="#/">Social</a>
         ${rooms.map((r) => `<a class="chip${r.id === roomId ? " on" : ""}" href="#/room/${r.id}">${esc(r.name)}</a>`).join("")}
         <a class="chip" href="#/rooms">${icon("plus")}ルーム</a>
       </div>`;
@@ -345,21 +353,22 @@
         <button class="${state.feedKind === "experience" ? "on" : ""}" data-act="kind" data-k="experience">体験シェア</button>
         <button class="${state.feedKind === "recruit" ? "on" : ""}" data-act="kind" data-k="recruit">仲間募集</button>
       </div>`;
-    const areaLabel = f.lines.length + f.extra.length ? [...f.lines.map((id) => lineById(id).name), ...f.extra][0] + (f.lines.length + f.extra.length > 1 ? ` ほか${f.lines.length + f.extra.length - 1}` : "") : "エリア";
+    const areaSel = [...f.cities, ...f.lines.map((id) => lineById(id).name), ...f.extra.map((x) => (PREFS.includes(x) ? x : `${x}駅`))];
+    const areaLabel = areaSel.length ? areaSel[0] + (areaSel.length > 1 ? ` ほか${areaSel.length - 1}` : "") : "エリア";
     const filters = `<div class="filters">
         <button class="fbtn${f.cats.length ? " on" : ""}" data-act="fCat">${f.cats.length ? `${esc(catName(f.cats[0]))}${f.cats.length > 1 ? ` ほか${f.cats.length - 1}` : ""}` : "カテゴリ"}</button>
-        <button class="fbtn${f.lines.length + f.extra.length ? " on" : ""}" data-act="fArea">${icon("pin")}${esc(areaLabel)}</button>
+        <button class="fbtn${areaSel.length ? " on" : ""}" data-act="fArea">${icon("pin")}${esc(areaLabel)}</button>
         <button class="fbtn${f.date ? " on" : ""}" data-act="fDate">${icon("clock")}${f.date ? esc(f.date.label) : "日付"}</button>
-        ${f.cats.length || f.lines.length || f.extra.length || f.date ? '<button class="fclear" data-act="fClear">クリア</button>' : ""}
+        ${f.cats.length || areaSel.length || f.date ? '<button class="fclear" data-act="fClear">クリア</button>' : ""}
       </div>`;
-    const filtered = f.cats.length || f.lines.length || f.extra.length || f.date;
+    const filtered = f.cats.length || areaSel.length || f.date;
     const empty = filtered ? `<div class="empty"><div class="big"></div><p>条件に合う投稿はまだありません。<br>条件を変えるか、自分で募集してみよう</p>
       <a class="btn" style="margin-top:14px" href="#/new?kind=recruit">募集する</a></div>` : `<div class="empty"><div class="big"></div><p>まだ投稿がありません。<br>最近やったことや、やりたいことを投稿してみよう</p>
       <a class="btn" style="margin-top:14px" href="#/new${roomId ? "?room=" + roomId : ""}">投稿する</a></div>`;
     setView(layout({ body: chips + roomHead + (f.date ? "" : seg) + filters + (list.length ? list.map((p) => postCard(p)).join("") : empty), active: roomId ? "rooms" : "home" }), {
       like: likeHandler,
       kind: (el) => { state.feedKind = el.dataset.k; renderFeed(roomId); },
-      fClear: () => { state.filters = { cats: [], lines: [], extra: [], date: null }; renderFeed(roomId); },
+      fClear: () => { state.filters = { cats: [], lines: [], extra: [], cities: [], date: null }; renderFeed(roomId); },
       fCat: () => openCatFilter(() => renderFeed(roomId)),
       fArea: () => openAreaFilter(() => renderFeed(roomId)),
       fDate: () => openDateFilter(roomId, () => renderFeed(roomId)),
@@ -381,18 +390,42 @@
     });
   }
   function openAreaFilter(done) {
-    const lines = [...state.filters.lines], extra = [...state.filters.extra];
-    const draw = () => AREAS.map((g) => `<div class="pick-group">${esc(g.group)}</div><div class="picks">${g.lines.map((l) =>
-      l.id === "pref"
-        ? `</div><div class="pick-group">${esc(l.name)}</div><div class="picks">${l.stations.map((st) => `<button class="pick sm${extra.includes(st) ? " on" : ""}" data-act="x" data-v="${st}">${esc(st)}</button>`).join("")}`
-        : `<button class="pick${lines.includes(l.id) ? " on" : ""}" data-act="l" data-v="${l.id}">${esc(l.name)}</button>`).join("")}</div>`).join("");
-    const sh = sheet(`<h2>沿線・エリアで絞り込む</h2><p class="meta">複数選べます。同じ駅を通るほかの路線の募集も表示されます</p><div id="ak">${draw()}</div>
+    const lines = [...state.filters.lines], extra = [...state.filters.extra], cities = [...state.filters.cities];
+    let q = "";
+    const ALL_STATIONS = [...new Set(ALL_LINES.filter((l) => !["online", "pref"].includes(l.id)).flatMap((l) => l.stations))];
+    const suggest = () => {
+      const t = q.trim().replace(/駅$/, "");
+      if (!t) return "";
+      const hitCities = Object.entries(CITIES).flatMap(([pref, list]) => list.map((c) => ({ c, pref }))).filter(({ c, pref }) => c.includes(t) || pref.includes(t)).slice(0, 12);
+      const hitPrefs = PREFS.filter((p) => p.includes(t) && !CITIES[p]).slice(0, 6);
+      const hitSt = ALL_STATIONS.filter((st) => st.includes(t)).slice(0, 8);
+      if (!hitCities.length && !hitPrefs.length && !hitSt.length) return '<p class="meta">見つかりませんでした。区や市の名前、駅名で探せます</p>';
+      return `<div class="picks">${hitCities.map(({ c, pref }) => `<button class="pick sm${cities.includes(c) ? " on" : ""}" data-act="c" data-v="${esc(c)}">${esc(c)}<small class="pref">${esc(pref)}</small></button>`).join("")}
+        ${hitPrefs.map((p) => `<button class="pick sm${cities.includes(p) ? " on" : ""}" data-act="c" data-v="${esc(p)}">${esc(p)}</button>`).join("")}
+        ${hitSt.map((st) => `<button class="pick sm${extra.includes(st) ? " on" : ""}" data-act="x" data-v="${esc(st)}">${esc(st)}駅</button>`).join("")}</div>`;
+    };
+    const chosen = () => {
+      const all = [...cities.map((c) => ({ k: "c", v: c, t: c })), ...extra.map((x) => ({ k: "x", v: x, t: PREFS.includes(x) ? x : `${x}駅` })), ...lines.map((l) => ({ k: "l", v: l, t: lineById(l).name }))];
+      return all.length ? `<div class="picks">${all.map((a) => `<button class="pick sm on" data-act="${a.k}" data-v="${esc(a.v)}">${esc(a.t)} ×</button>`).join("")}</div>` : '<p class="meta">まだ選んでいません</p>';
+    };
+    const lineHtml = () => `<div class="picks">${ALL_LINES.filter((l) => !["online", "pref"].includes(l.id)).map((l) => `<button class="pick${lines.includes(l.id) ? " on" : ""}" data-act="l" data-v="${l.id}">${esc(l.name)}</button>`).join("")}
+      <button class="pick${cities.includes("オンライン") ? " on" : ""}" data-act="c" data-v="オンライン">オンライン</button></div>`;
+    const redraw = () => { sh.el.querySelector("#sug").innerHTML = suggest(); sh.el.querySelector("#cho").innerHTML = chosen(); sh.el.querySelector("#lk").innerHTML = lineHtml(); };
+    const sh = sheet(`<h2>エリアで絞り込む</h2>
+      <label class="f" for="areaQ">地名で探す</label>
+      <input class="input" id="areaQ" placeholder="例：新宿区、横浜市、吉祥寺" autocomplete="off">
+      <div id="sug" style="margin-top:10px"></div>
+      <div class="pick-group">選んでいるエリア</div><div id="cho">${chosen()}</div>
+      <div class="pick-group">沿線で探す <span class="meta">同じ駅を通るほかの路線の募集も表示されます</span></div><div id="lk">${lineHtml()}</div>
       <div class="row sheet-foot"><button class="btn sub" data-act="clr" style="flex:1">選択を外す</button><button class="btn" data-act="ok" style="flex:2">この条件で見る</button></div>`, {
-      l: (el) => { toggleIn(lines, el.dataset.v); sh.el.querySelector("#ak").innerHTML = draw(); },
-      x: (el) => { toggleIn(extra, el.dataset.v); sh.el.querySelector("#ak").innerHTML = draw(); },
-      clr: () => { lines.length = 0; extra.length = 0; sh.el.querySelector("#ak").innerHTML = draw(); },
-      ok: (_a, close) => { state.filters.lines = lines; state.filters.extra = extra; close(); done(); },
+      c: (el) => { toggleIn(cities, el.dataset.v); redraw(); },
+      x: (el) => { toggleIn(extra, el.dataset.v); redraw(); },
+      l: (el) => { toggleIn(lines, el.dataset.v); redraw(); },
+      clr: () => { lines.length = 0; extra.length = 0; cities.length = 0; redraw(); },
+      ok: (_a, close) => { Object.assign(state.filters, { lines, extra, cities }); close(); done(); },
     });
+    const inp = sh.el.querySelector("#areaQ");
+    inp.addEventListener("input", () => { q = inp.value; sh.el.querySelector("#sug").innerHTML = suggest(); });
   }
   function openDateFilter(roomId, done) {
     const today = dayStart(new Date());
@@ -402,7 +435,7 @@
     async function drawCal(el) {
       const start = month, end = new Date(month.getFullYear(), month.getMonth() + 1, 1);
       const f = state.filters;
-      const posts = await S.listPosts({ roomId, kind: "recruit", categories: f.cats, stations: filterStations(), from: start.toISOString(), to: end.toISOString() });
+      const posts = await S.listPosts({ roomId, kind: "recruit", categories: f.cats, stations: filterStations(), cities: f.cities, from: start.toISOString(), to: end.toISOString() });
       const count = {};
       posts.filter((p) => !blocked.has(p.author_id) && p.status === "open").forEach((p) => { const k = dayStart(p.activity_date).getTime(); count[k] = (count[k] || 0) + 1; });
       let cells = "";
@@ -485,19 +518,25 @@
 
     let memoryPanel = "";
     if (member && ended) {
+      const pages = await S.listCraftPages(id).catch(() => []);
       const okNames = members.map((m) => `<span class="${consents.includes(m.id) ? "ok" : "ng"}">${consents.includes(m.id) ? "✓" : "・"} ${esc(m.display_name)}</span>`).join("");
+      const iOk = consents.includes(S.userId());
       memoryPanel = `<div class="sec-title">おもいで</div>
         <div class="card">
           <p><b>おつかれさまでした！</b></p>
-          <p class="meta">当日の写真をみんなで集めて、コラージュにしよう。写真は参加メンバーだけが見られます。</p>
+          <p class="meta">当日の写真をアルバムに集めて、クラフトブックのページにしよう。写真もページも、参加メンバーだけが見られます。</p>
           <div class="album">${photos.map((ph) => `<div class="ph"><img src="${esc(ph.url)}" alt="">${ph.uploader_id === S.userId() ? `<button data-act="delPhoto" data-id="${ph.id}" aria-label="削除">×</button>` : ""}</div>`).join("")}
             <label class="ph add">${icon("camera")}<span>写真を追加</span><input type="file" accept="image/*" multiple id="albumInput" hidden></label>
           </div>
-          <button class="btn block" data-act="collage" style="margin-top:12px" ${photos.length ? "" : "disabled"}>コラージュをつくる</button>
+          <div class="pick-group">クラフトブック</div>
+          ${pages.length ? `<div class="book small">${pages.map((pg) => `<a class="book-page" href="#/craft/${id}/${pg.id}">${pg.thumb_url ? `<img src="${esc(pg.thumb_url)}" alt="">` : '<div class="blank"></div>'}<span class="cap">${esc((pg.author && pg.author.display_name) || "")}</span></a>`).join("")}</div>` : '<p class="meta">まだページはありません。写真を切り抜いてステッカーにして、自由に貼ろう</p>'}
+          <a class="btn block accent" href="#/craft/${id}/new" style="margin-top:12px">${icon("pen")}ページをつくる</a>
           <div class="consent"><span class="meta">外部へのシェアOK：</span>${okNames}</div>
+          <button class="btn sm ${iOk ? "ghost" : "sub"}" data-act="consent" style="margin-top:8px">${iOk ? "シェアOKを取り消す" : "私はシェアOK"}</button>
+          <p class="hint">写っている全員がOKすると、ページを保存・シェアできます</p>
         </div>`;
     } else if (member && p.activity_date) {
-      memoryPanel = `<div class="card" style="background:var(--pink-light)"><p class="meta">${fmtDate(new Date(eventEnd(p)).toISOString())} を過ぎると、みんなの写真を集めてコラージュが作れます</p></div>`;
+      memoryPanel = `<div class="card" style="background:var(--pink-light)"><p class="meta">${fmtDate(new Date(eventEnd(p)).toISOString())} を過ぎると、みんなの写真を集めてクラフトブックのページが作れます</p></div>`;
     }
     const sourceHtml = source ? `<div class="card tap source" data-go="#/post/${source.id}"><span class="meta">↪ ${esc(source.author.display_name)}さんの投稿から生まれました</span><b>${esc(source.title)}</b></div>` : "";
     const metoo = !isRec ? `<button class="btn sub block" data-act="metoo" style="margin-bottom:14px">私もやりたい！一緒にやる人を募集する</button>` : "";
@@ -568,6 +607,7 @@
       delCmt: async (el) => { await S.deleteComment(el.dataset.id); renderPost(id); },
       repCmt: (el) => openReport("comment", el.dataset.id),
       metoo: () => { location.hash = `#/new?kind=recruit&from=${p.id}`; },
+      consent: async () => { const on = consents.includes(S.userId()); await S.setShareConsent(p.id, !on); toast(on ? "取り消しました" : "シェアOKにしました"); renderPost(id); },
       delPhoto: async (el) => { await S.deleteEventPhoto(photos.find((x) => x.id === el.dataset.id)); renderPost(id); },
       collage: async () => {
         const blob = await makeCollage(p, photos, members.length);
@@ -653,10 +693,10 @@
     let imageBlob = null;
     const fromId = q.get("from");
     const from = fromId ? await S.getPost(fromId) : null;
-    let pre = { title: "", body: "", room: preRoom, category: "", line: "", station: "" };
+    let pre = { title: "", body: "", room: preRoom, category: "", line: "", station: "", city: "" };
     if (from) {
       pre.room = from.room_id || preRoom;
-      Object.assign(pre, { category: from.category || "", line: from.line || "", station: from.station || "" });
+      Object.assign(pre, { category: from.category || "", line: from.line || "", station: from.station || "", city: from.city || "" });
       if (kind === "recruit") pre = { ...pre, title: `私も「${from.title.replace(/[「」]/g, "").replace(/のおもいで$/, "")}」やりたい！`.slice(0, 60), body: `${from.author.display_name}さんの投稿を見て、やってみたくなりました！` };
       else pre = { ...pre, title: `「${from.title}」のおもいで`.slice(0, 60) };
       if (q.get("collage") && pendingCollage && pendingCollage.from.id === from.id) imageBlob = pendingCollage.blob;
@@ -680,9 +720,14 @@
 
       <label class="f">エリア <small id="areaReq">（任意）</small></label>
       <div class="area-sel">
-        <select class="input" name="line" id="lineSel"><option value="">路線・エリアを選ぶ</option>${AREAS.map((g) => `<optgroup label="${esc(g.group)}">${g.lines.map((l) => `<option value="${l.id}" ${pre.line === l.id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</optgroup>`).join("")}</select>
-        <select class="input" name="station" id="stSel"></select>
+        <select class="input" name="pref" id="prefSel"><option value="">都道府県</option><option value="オンライン" ${pre.city === "オンライン" ? "selected" : ""}>オンライン</option>${PREFS.map((p) => `<option ${(pre.city && citiesOf(p).includes(pre.city)) || (!pre.city && false) ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+        <select class="input" name="city" id="citySel"></select>
       </div>
+      <details class="near" ${pre.station ? "open" : ""}><summary>最寄りの駅も入れる <small>（任意）</small></summary>
+      <div class="area-sel" style="margin-top:8px">
+        <select class="input" name="line" id="lineSel"><option value="">路線を選ぶ</option>${ALL_LINES.filter((l) => !["online", "pref"].includes(l.id)).map((l) => `<option value="${l.id}" ${pre.line === l.id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select>
+        <select class="input" name="station" id="stSel"></select>
+      </div></details>
 
       <label class="f">写真 <small>（任意）</small></label>
       <input type="file" accept="image/*" name="photo" id="photo" class="input">
@@ -691,7 +736,7 @@
       <div id="recFields" style="display:${kind === "recruit" ? "block" : "none"}">
         <label class="f">日時</label>
         <input class="input" type="datetime-local" name="date" min="${minDate}">
-        <label class="f">終了予定 <small>（任意。過ぎるとみんなでコラージュが作れます）</small></label>
+        <label class="f">終了予定 <small>（任意。過ぎるとみんなでクラフトブックが作れます）</small></label>
         <input class="input" type="datetime-local" name="end" min="${minDate}">
         <label class="f">募集人数 <small>（あなた以外に何人？）</small></label>
         <input class="input" type="number" name="capacity" min="1" max="100" value="2">
@@ -702,7 +747,7 @@
 
       <label class="f">公開範囲</label>
       <div class="vis">
-        <label><input type="radio" name="vis" value="public" ${pre.room ? "" : "checked"}>みんなに公開</label>
+        <label><input type="radio" name="vis" value="public" ${pre.room ? "" : "checked"}>Social（みんなに公開）</label>
         ${rooms.map((r) => `<label><input type="radio" name="vis" value="${r.id}" ${pre.room === r.id ? "checked" : ""}>${esc(r.name)} のメンバーだけ</label>`).join("")}
       </div>
       ${rooms.length ? "" : '<p class="hint">ルームを作ると、仲のいい人だけに見える投稿もできます</p>'}
@@ -730,11 +775,13 @@
         if (!category) throw new Error("カテゴリを選んでください");
         if (!data.title) throw new Error("タイトルを入れてください");
         data.category = category;
-        if (f.line.value && f.station.value) Object.assign(data, { line: f.line.value, station: f.station.value, area: f.station.value });
+        const city = f.pref.value === "オンライン" ? "オンライン" : f.city.value;
+        if (city) Object.assign(data, { city, area: city });
+        if (f.line.value && f.station.value) Object.assign(data, { line: f.line.value, station: f.station.value });
         if (kind === "recruit") {
           needProfile();
           if (!f.date.value) throw new Error("日時を入れてください");
-          if (!data.station) throw new Error("エリア（路線と駅）を選んでください");
+          if (!data.city) throw new Error("エリア（都道府県と市区町村）を選んでください");
           if (f.end.value && new Date(f.end.value) <= new Date(f.date.value)) throw new Error("終了予定は開始より後にしてください");
           const cap = parseInt(f.capacity.value, 10);
           if (!(cap >= 1 && cap <= 100)) throw new Error("募集人数は1〜100人で入れてください");
@@ -752,12 +799,23 @@
     const lineSel = document.getElementById("lineSel"), stSel = document.getElementById("stSel");
     const fillStations = (keep) => {
       const l = lineById(lineSel.value);
-      stSel.innerHTML = l ? `<option value="">${l.id === "pref" ? "都道府県を選ぶ" : l.id === "online" ? "" : "駅を選ぶ"}</option>` + l.stations.map((st) => `<option ${keep === st ? "selected" : ""}>${esc(st)}</option>`).join("") : '<option value="">先に路線を選ぶ</option>';
-      if (l && l.id === "online") stSel.value = "オンライン";
+      stSel.innerHTML = l ? '<option value="">駅を選ぶ</option>' + l.stations.map((st) => `<option ${keep === st ? "selected" : ""}>${esc(st)}</option>`).join("") : '<option value="">先に路線を選ぶ</option>';
       stSel.disabled = !l;
     };
     fillStations(pre.station);
     lineSel.addEventListener("change", () => fillStations());
+    const prefSel = document.getElementById("prefSel"), citySel = document.getElementById("citySel");
+    const fillCities = (keep) => {
+      const p = prefSel.value;
+      if (p === "オンライン") { citySel.innerHTML = '<option value="オンライン">オンライン</option>'; citySel.disabled = true; return; }
+      citySel.innerHTML = p ? '<option value="">市区町村を選ぶ</option>' + citiesOf(p).map((c) => `<option ${keep === c ? "selected" : ""}>${esc(c === p ? `${p}（全域）` : c)}</option>`).join("") : '<option value="">先に都道府県を選ぶ</option>';
+      [...citySel.options].forEach((o) => { if (o.text.endsWith("（全域）")) o.value = p; });
+      citySel.disabled = !p;
+    };
+    if (pre.city && pre.city !== "オンライン") { const pf = PREFS.find((p) => citiesOf(p).includes(pre.city)); if (pf) prefSel.value = pf; }
+    if (!prefSel.value && !pre.city) prefSel.value = "東京都";
+    fillCities(pre.city);
+    prefSel.addEventListener("change", () => fillCities());
     if (kind === "recruit") document.getElementById("areaReq").textContent = "";
     document.getElementById("photo").addEventListener("change", (e) => guard(async () => {
       const file = e.target.files[0]; if (!file) return;
@@ -875,6 +933,7 @@
         ${me.bio ? `<p class="body" style="margin-top:14px">${esc(me.bio)}</p>` : ""}
         ${me.tags && me.tags.length ? `<div class="hobbies">${me.tags.map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}
         <div class="row" style="margin-top:14px"><a class="btn sm" href="#/me/edit" style="flex:1">${icon("pen")}プロフィールを編集</a><button class="btn sub sm" data-act="preview" style="flex:1">見え方を確認</button></div>
+        <a class="btn sub sm block" href="#/book" style="margin-top:8px">${icon("note")}マイブック（クラフトブック）を見る</a>
       </div>
       ${me.age_range ? "" : '<div class="card warn">年代を設定すると、仲間募集への投稿や参加申請ができるようになります</div>'}
       <div class="sec-title">ルームでの名前 <span class="meta">そのルームのメンバーにだけ見えます</span></div>
@@ -1026,6 +1085,8 @@
     });
   }
 
+  const C = window.DomateCraft({ S, esc, icon, toast, sheet, guard, setView, layout, back, setPendingImage: (blob, post) => { pendingCollage = { blob, from: post }; } });
+
   /* ---------------- 画面の切り替え ---------------- */
   async function route() {
     clearInterval(pollTimer);
@@ -1054,6 +1115,8 @@
       case "join": return doJoin(parts[1]);
       case "activity": return renderActivity();
       case "me": return parts[1] === "edit" ? renderProfileEdit() : renderMe();
+      case "craft": return C.renderEditor(parts[1], parts[2]);
+      case "book": return C.renderBook();
       default: location.hash = "#/";
     }
   }
